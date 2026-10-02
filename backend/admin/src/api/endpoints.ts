@@ -1,6 +1,10 @@
 import { api } from './http'
 import type {
   AuthResponse,
+  CommunityPostPage,
+  CommunityPostView,
+  CommunityReportPage,
+  CommunityReportView,
   DemoScenario,
   DemoScenarioCatalog,
   DemoScenarioInput,
@@ -79,6 +83,27 @@ export const mockApi = {
     ),
   remove: (id: string) =>
     api.del<void>('/admin/mock/scenarios/' + encodeURIComponent(id)),
+}
+
+export const communityAdminApi = {
+  posts: (status: string, page = 1, size = 12) =>
+    api.get<CommunityPostPage>('/admin/community/posts', {
+      query: { status, page, size },
+    }),
+  moderatePost: (id: string, status: string, note: string | null) =>
+    api.patch<CommunityPostView>(
+      '/admin/community/posts/' + encodeURIComponent(id) + '/status',
+      { status, note },
+    ),
+  reports: (status: string, page = 1, size = 12) =>
+    api.get<CommunityReportPage>('/admin/community/reports', {
+      query: { status, page, size },
+    }),
+  handleReport: (id: string, status: string, note: string | null) =>
+    api.patch<CommunityReportView>(
+      '/admin/community/reports/' + encodeURIComponent(id),
+      { status, note },
+    ),
 }
 
 export const feedbackApi = {

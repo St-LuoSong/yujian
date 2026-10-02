@@ -51,6 +51,12 @@ const router = createRouter({
           meta: { title: 'Mock 数据', crumb: 'Demo Data', nav: 'mock' },
         },
         {
+          path: 'community',
+          name: 'community',
+          component: () => import('../views/CommunityModerationView.vue'),
+          meta: { title: '社区审核', crumb: 'Community', nav: 'community' },
+        },
+        {
           path: 'feedback',
           name: 'feedback',
           component: () => import('../views/FeedbackView.vue'),

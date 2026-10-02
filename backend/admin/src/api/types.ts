@@ -264,3 +264,50 @@ export interface DemoScenarioInput {
   note: string | null
   enabled: boolean
 }
+
+export interface CommunityPostView {
+  id: string
+  authorName: string
+  authorAvatarKey: string | null
+  tripPlanId: string | null
+  title: string
+  content: string
+  city: string
+  tags: string | null
+  visibility: string
+  status: string
+  imageUrls: string[]
+  likeCount: number
+  viewCount: number
+  likedByMe: boolean
+  createdAt: string
+  publishedAt: string | null
+  moderationNote: string | null
+}
+
+export interface CommunityPostPage {
+  items: CommunityPostView[]
+  page: number
+  size: number
+  total: number
+  hasMore: boolean
+}
+
+export interface CommunityReportView {
+  id: string
+  postId: string
+  reporterName: string
+  reason: string
+  status: string
+  handlerNote: string | null
+  createdAt: string
+  handledAt: string | null
+}
+
+export interface CommunityReportPage {
+  items: CommunityReportView[]
+  page: number
+  size: number
+  total: number
+  hasMore: boolean
+}

@@ -16,8 +16,9 @@ const navItems = [
   { key: 'ai', index: '04', label: 'AI 运行', to: '/ai' },
   { key: 'prompts', index: '05', label: '提示词版本', to: '/prompts' },
   { key: 'mock', index: '06', label: 'Mock 数据', to: '/mock' },
-  { key: 'feedback', index: '07', label: '用户反馈', to: '/feedback' },
-  { key: 'logs', index: '08', label: '操作日志', to: '/logs' },
+  { key: 'community', index: '07', label: '社区审核', to: '/community' },
+  { key: 'feedback', index: '08', label: '用户反馈', to: '/feedback' },
+  { key: 'logs', index: '09', label: '操作日志', to: '/logs' },
 ]
 
 const activeNav = computed(() => (route.meta.nav as string) ?? 'overview')
