@@ -9,7 +9,7 @@ T20 服务端接口文档（`docs/API.md`）、T21 定位 + 附近景点（全�
 T22 铁路票价与中转换乘进入规划链路、T23 公开测试与容器部署收口、
 T24 管理台内容运营视图、T25 提示词版本管理、T26 APK 运行时服务器地址、
 T27 Mock 数据管理、T28 个人信息与账号安全、T29 服务端消息中心、
-T30 社区旅记后端底座、T31 社区 Flutter 浏览体验
+T30 社区旅记后端底座、T31 社区 Flutter 浏览体验、T32 社区发布流程
 
 > 这份文档只回答两个问题：**现在能演示什么**、**还差什么**。
 > 所有"已完成"都指的是**本机实跑验证过**，不是"代码写了"。
@@ -65,6 +65,7 @@ APK、后端、管理台三条线都能跑起来，主业务闭环（发现 → 
 | 三十 | T29 服务端消息中心 | 完成 | 登录后消息与已读状态跟账号走；未登录仍使用本机说明；「我的」页只保留设置里的退出登录；见本文第 23 节 |
 | 三十一 | T30 社区旅记后端底座 | 完成 | 旅记发布/编辑/删除、公开信息流、详情、点赞、举报和管理员审核接口；见本文第 24 节 |
 | 三十二 | T31 社区 Flutter 浏览体验 | 完成 | 底部「旅记」入口、信息流分页、城市/主题筛选、详情、点赞和举报；见本文第 25 节 |
+| 三十三 | T32 社区发布流程 | 完成 | 从本人行程发布旅记、1—9 张图片、公开范围、服务端去 EXIF、提交审核；见本文第 26 节 |
 
 ## 3. 现在真实可用的能力
 
@@ -118,11 +119,11 @@ node scripts\verify-railway-mcp.mjs   通过 21 项，失败 0 项
 node scripts\verify-tools.mjs         通过 37 项，失败 0 项
 node scripts\verify-map.mjs           通过 23 项，失败 0 项
 node scripts\verify-llm.mjs           通过 12 项，失败 0 项（只花 1 次模型调用）
-mvn -o -B test                        Tests run: 108, Failures: 0, Errors: 0
+mvn -o -B test                        Tests run: 110, Failures: 0, Errors: 0
 flutter analyze                       No issues found
 flutter test                          All tests passed (144)
 npm run build（admin）                 608 modules transformed, built
-flutter build apk --debug             app-debug.apk   193.9MB（T31 重新构建，见第 25 节）
+flutter build apk --debug             app-debug.apk   194.1MB（T32 重新构建，见第 26 节）
 flutter build apk --release           app-release.apk 52.6MB（未传 API_BASE_URL，启动即提示配置失败，属刻意设计）
 ```
 
@@ -1357,6 +1358,8 @@ mvn -o -B test        Tests run: 108, Failures: 0, Errors: 0
 ```text
 flutter analyze       No issues found
 flutter test          All tests passed (144)
+flutter build apk --debug
+  √ app-debug.apk，194,087,481 bytes，Gradle assembleDebug 151.9s
                       （新增社区仓库测试 3 + 社区页面 widget 测试 1）
 flutter build apk --debug
   √ app-debug.apk，193,919,585 bytes，Gradle assembleDebug 15.2s
@@ -1369,3 +1372,50 @@ flutter build apk --debug
 3. 管理台审核页尚未实现，下一阶段补；
 4. 社区信息流当前不做本地离线缓存，失败时明确提示；
 5. 评论、关注、私信不进入首版范围。
+
+---
+
+## 26. T32 执行结果（社区发布流程）
+
+### 26.1 发布入口
+
+- 「旅记」页右上角新增「写旅记」；
+- 未登录先进入登录，不伪造发布成功；
+- 发布页必须选择本人已保存的行程，不能脱离行程凭空发帖。
+
+### 26.2 发布内容
+
+- 标题、正文、城市、标签；
+- 公开 / 仅自己可见；
+- 1—9 张图片，Android 系统相册多选；
+- 图片先上传服务端，再随旅记提交；
+- 提交后状态为 `PENDING`，不会直接出现在公开信息流。
+
+### 26.3 图片隐私
+
+新增 `POST /api/community/media/images`：
+
+- 只接受 JPEG / PNG；
+- 最长边不超过 3000 像素；
+- 服务端重新解码再编码，主动去除 EXIF 位置信息；
+- GIF 不进入用户旅记图片入口；
+- 上传动作记录操作日志，但不记录图片内容。
+
+### 26.4 验证结果
+
+```text
+mvn -o -B test        Tests run: 110, Failures: 0, Errors: 0
+                      （新增 MediaStorageServiceTest 2 项）
+flutter analyze       No issues found
+flutter test          All tests passed (144)
+```
+
+### 26.5 下一阶段
+
+按 `COMMUNITY_PLAN.md` 进入第 4 阶段：
+
+- 管理台旅记审核列表；
+- 通过、驳回、下架、恢复；
+- 举报处理；
+- 审核操作日志；
+- 真正打通“用户发布 → 管理台审核 → 公开信息流”。

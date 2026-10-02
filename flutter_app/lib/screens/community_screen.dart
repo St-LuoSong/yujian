@@ -15,6 +15,7 @@ import '../core/widgets/tag_pill.dart';
 import '../data/repositories/community_repository.dart';
 import '../models/community_models.dart';
 import 'account_screen.dart';
+import 'community_publish_screen.dart';
 
 /// Community feed. Public browsing does not require an account; like/report do.
 class CommunityScreen extends ConsumerStatefulWidget {
@@ -139,6 +140,23 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
     );
   }
 
+  Future<void> _openPublish() async {
+    if (ref.read(sessionProvider).valueOrNull == null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const AccountScreen()),
+      );
+      if (!mounted || ref.read(sessionProvider).valueOrNull == null) return;
+    }
+    final bool? created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => const CommunityPublishScreen(),
+      ),
+    );
+    if (created == true && mounted) {
+      await _reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final double page = AppSpacing.pageFor(MediaQuery.sizeOf(context).width);
@@ -154,7 +172,10 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
             SliverPadding(
               padding: EdgeInsets.fromLTRB(page, 20, page, 0),
               sliver: SliverToBoxAdapter(
-                child: _CommunityHeader(total: _total),
+                child: _CommunityHeader(
+                  total: _total,
+                  onCreate: _openPublish,
+                ),
               ),
             ),
             SliverPadding(
@@ -233,22 +254,34 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
 }
 
 class _CommunityHeader extends StatelessWidget {
-  const _CommunityHeader({required this.total});
+  const _CommunityHeader({required this.total, required this.onCreate});
 
   final int total;
+  final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            '旅记',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-              height: 1.1,
-            ),
+          Row(
+            children: <Widget>[
+              const Expanded(
+                child: Text(
+                  '旅记',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: onCreate,
+                icon: const Icon(Icons.edit_outlined, size: 17),
+                label: const Text('写旅记'),
+              ),
+            ],
           ),
           const SizedBox(height: 7),
           const Text(

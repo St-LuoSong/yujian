@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+
 import '../../core/network/api_client.dart';
 import '../../models/community_models.dart';
 
@@ -30,6 +34,30 @@ class CommunityRepository {
     return CommunityPost.fromJson(data);
   }
 
+  Future<CommunityPost> createPost({
+    required String title,
+    required String content,
+    required String city,
+    required String tags,
+    required String visibility,
+    String? tripPlanId,
+    required List<String> imageUrls,
+  }) async {
+    final data = await _client.postJsonObject(
+      '/community/posts',
+      body: <String, Object?>{
+        'title': title,
+        'content': content,
+        'city': city,
+        'tags': tags,
+        'visibility': visibility,
+        'tripPlanId': tripPlanId,
+        'imageUrls': imageUrls,
+      },
+    );
+    return CommunityPost.fromJson(data);
+  }
+
   Future<CommunityPost> like(String id) async {
     final data = await _client.postJsonObject('/community/posts/$id/like');
     return CommunityPost.fromJson(data);
@@ -47,5 +75,15 @@ class CommunityRepository {
         data: <String, Object?>{'reason': reason},
       ),
     );
+  }
+
+  Future<String> uploadImage(File file) async {
+    final data = await _client.postMultipartJson(
+      '/community/media/images',
+      data: FormData.fromMap(<String, Object>{
+        'file': await MultipartFile.fromFile(file.path),
+      }),
+    );
+    return (data['relativeUrl'] ?? data['url'] ?? '').toString();
   }
 }

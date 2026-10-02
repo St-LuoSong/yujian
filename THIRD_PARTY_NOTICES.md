@@ -14,6 +14,7 @@
 | share_plus | BSD-3-Clause | 系统分享行程链接 | 已使用（`screens/trip_screen.dart`） |
 | cached_network_image | MIT | 图片磁盘缓存与加载占位 | 已使用（`core/widgets/photo_plate.dart`） |
 | geolocator | MIT | 系统定位权限与当前位置（「附近的景点」） | 已使用（`core/location/location_service.dart`） |
+| image_picker | BSD-3-Clause | 从系统相册选择旅记图片 | 已使用（`screens/community_publish_screen.dart`） |
 
 ### 已移除的 Flutter 依赖
 

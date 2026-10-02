@@ -156,6 +156,24 @@ class ApiClient {
     return data;
   }
 
+  /// Uploads multipart data and reads a JSON object back.
+  Future<Map<String, dynamic>> postMultipartJson(
+    String path, {
+    required FormData data,
+    Map<String, dynamic>? headers,
+  }) async {
+    final response = await post<Map<String, dynamic>>(
+      path,
+      data: data,
+      headers: headers,
+    );
+    final payload = response.data;
+    if (payload == null) {
+      throw ApiFailure.parse(StateError('$path 返回空响应'));
+    }
+    return payload;
+  }
+
   /// Reads an endpoint that answers with a JSON array.
   Future<List<dynamic>> getJsonList(
     String path, {

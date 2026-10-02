@@ -10,6 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
@@ -94,6 +98,90 @@ public class MediaStorageService {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "MEDIA_WRITE_FAILED", "图片保存失败，请稍后再试");
         }
         return new StoredImage(fileName, format.extension(), bytes.length, size[0], size[1]);
+    }
+
+    /**
+     * 用户社区图片：重新解码后再编码，主动丢掉 EXIF（尤其是 GPS）。
+     *
+     * 只接受 JPEG / PNG；GIF 会保留帧与元数据，不适合作为公开旅记图片入口。
+     */
+    public StoredImage storeCommunityImage(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "MEDIA_EMPTY", "请选择要上传的图片");
+        }
+        long maxBytes = Math.max(1, properties.getMedia().getMaxSizeMb()) * 1024L * 1024L;
+        if (file.getSize() > maxBytes) {
+            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "MEDIA_TOO_LARGE",
+                "图片不能超过 " + properties.getMedia().getMaxSizeMb() + "MB");
+        }
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException ex) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "MEDIA_UNREADABLE", "图片读取失败，请重新选择");
+        }
+        ImageFormat format = ImageFormat.detect(bytes);
+        if (format != ImageFormat.JPEG && format != ImageFormat.PNG) {
+            throw new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "COMMUNITY_MEDIA_TYPE_UNSUPPORTED",
+                "旅记图片只支持 JPEG 和 PNG");
+        }
+        int[] size = readDimensions(bytes);
+        if (size[0] > 3000 || size[1] > 3000) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "COMMUNITY_MEDIA_DIMENSION_TOO_LARGE",
+                "旅记图片最长边不能超过 3000 像素");
+        }
+
+        BufferedImage decoded;
+        try {
+            decoded = ImageIO.read(new ByteArrayInputStream(bytes));
+        } catch (IOException ex) {
+            throw unsupported();
+        }
+        if (decoded == null) {
+            throw unsupported();
+        }
+        BufferedImage sanitized = redraw(decoded, format);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try {
+            String imageFormat = format == ImageFormat.PNG ? "png" : "jpg";
+            if (!ImageIO.write(sanitized, imageFormat, output)) {
+                throw unsupported();
+            }
+        } catch (IOException ex) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "MEDIA_WRITE_FAILED",
+                "图片处理失败，请稍后再试");
+        }
+
+        byte[] safeBytes = output.toByteArray();
+        String fileName = UUID.randomUUID().toString().replace("-", "") + "." + format.extension();
+        Path target = resolveSafely(fileName);
+        try {
+            Files.copy(new ByteArrayInputStream(safeBytes), target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            log.error("Failed to persist sanitized community media", ex);
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "MEDIA_WRITE_FAILED",
+                "图片保存失败，请稍后再试");
+        }
+        return new StoredImage(fileName, format.extension(), safeBytes.length, size[0], size[1]);
+    }
+
+    private static BufferedImage redraw(BufferedImage source, ImageFormat format) {
+        int type = format == ImageFormat.PNG && source.getColorModel().hasAlpha()
+            ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
+        BufferedImage target = new BufferedImage(source.getWidth(), source.getHeight(), type);
+        Graphics2D graphics = target.createGraphics();
+        try {
+            if (type == BufferedImage.TYPE_INT_RGB) {
+                graphics.setColor(java.awt.Color.WHITE);
+                graphics.fillRect(0, 0, target.getWidth(), target.getHeight());
+            }
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(source, 0, 0, null);
+        } finally {
+            graphics.dispose();
+        }
+        return target;
     }
 
     /** 供 Spring 的静态资源处理器使用；目录必须以 / 结尾才是合法的 resource location。 */
