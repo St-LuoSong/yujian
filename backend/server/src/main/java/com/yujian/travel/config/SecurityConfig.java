@@ -56,6 +56,8 @@ public class SecurityConfig {
                     // 反馈允许匿名提交，服务端只保存内容与可选联系方式。
                     "/api/feedback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/trip-shares/*").permitAll()
+                // 社区公开信息流与详情不要求登录；发布、点赞和举报仍然必须登录。
+                .requestMatchers(HttpMethod.GET, "/api/community/posts", "/api/community/posts/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/email/**").permitAll()
                 // Operator endpoints. The bootstrap account is created from
                 // ADMIN_USERNAME / ADMIN_PASSWORD, so this is never public.

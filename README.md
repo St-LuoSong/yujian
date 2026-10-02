@@ -20,6 +20,7 @@
 - 账号：注册登录、匿名体验、个人信息（昵称与预设头像）、修改密码、邮箱验证、退出所有设备、删除账号、消息通知。
 - 服务端：Spring Boot + MySQL 8、LangChain4j 四家 LLM 供应商、百度地图、Open-Meteo、12306 MCP、提示词版本、Mock 数据覆盖、运营统计与审计日志。
 - 管理台：景点内容、图片版权、城市/主题、AI 运行、提示词版本、Mock 数据、用户反馈、操作日志。
+- 社区旅记：后端已具备发布、浏览、详情、点赞、举报和管理员审核接口；Flutter 信息流与发布页、管理台审核页仍待开发。
 
 当前仍未完成或属于交付阶段的事项：
 
@@ -42,6 +43,7 @@
 - [`docs/PHASE11_LLM_ENABLED.md`](docs/PHASE11_LLM_ENABLED.md)：真正接上大模型，以及打开开关后暴露并修复的两个真实缺陷
 - [`docs/PHASE11_MAP.md`](docs/PHASE11_MAP.md)：行程地图（服务端代理静态底图）、投影反证、底图票据、地理编码判据与降级口径
 - [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：**当前进度快照、已完成 / 未实现清单与下一步优先级**
+- [`docs/COMMUNITY_PLAN.md`](docs/COMMUNITY_PLAN.md)：社区旅记的分阶段实施计划与当前阶段边界
 - [`docs/HTTPS_RELEASE_DEPLOYMENT.md`](docs/HTTPS_RELEASE_DEPLOYMENT.md)：**腾讯云 HTTPS、Docker 部署与 Release APK 真机验证步骤**
 - [`docs/UI_REDESIGN.md`](docs/UI_REDESIGN.md)、[`docs/DESIGN_DIRECTION.md`](docs/DESIGN_DIRECTION.md)：v0.3 视觉与交互方向
 

@@ -8,7 +8,8 @@ T18 登录时序修复与行程首页改版、T19 行程导航修复与河南底
 T20 服务端接口文档（`docs/API.md`）、T21 定位 + 附近景点（全链路）、
 T22 铁路票价与中转换乘进入规划链路、T23 公开测试与容器部署收口、
 T24 管理台内容运营视图、T25 提示词版本管理、T26 APK 运行时服务器地址、
-T27 Mock 数据管理、T28 个人信息与账号安全、T29 服务端消息中心
+T27 Mock 数据管理、T28 个人信息与账号安全、T29 服务端消息中心、
+T30 社区旅记后端底座
 
 > 这份文档只回答两个问题：**现在能演示什么**、**还差什么**。
 > 所有"已完成"都指的是**本机实跑验证过**，不是"代码写了"。
@@ -62,6 +63,7 @@ APK、后端、管理台三条线都能跑起来，主业务闭环（发现 → 
 | 二十八 | T27 Mock 数据管理 | 完成 | `demo_scenario` 表 + 管理台覆盖编辑；精确匹配/默认兜底/内置回退；见本文第 21 节 |
 | 二十九 | T28 个人信息与账号安全 | 完成 | 昵称/预设头像、修改密码、邮箱验证、退出所有设备、删除账号；收藏统一改为星标；见本文第 22 节 |
 | 三十 | T29 服务端消息中心 | 完成 | 登录后消息与已读状态跟账号走；未登录仍使用本机说明；「我的」页只保留设置里的退出登录；见本文第 23 节 |
+| 三十一 | T30 社区旅记后端底座 | 完成 | 旅记发布/编辑/删除、公开信息流、详情、点赞、举报和管理员审核接口；见本文第 24 节 |
 
 ## 3. 现在真实可用的能力
 
@@ -115,7 +117,7 @@ node scripts\verify-railway-mcp.mjs   通过 21 项，失败 0 项
 node scripts\verify-tools.mjs         通过 37 项，失败 0 项
 node scripts\verify-map.mjs           通过 23 项，失败 0 项
 node scripts\verify-llm.mjs           通过 12 项，失败 0 项（只花 1 次模型调用）
-mvn -o -B test                        Tests run: 104, Failures: 0, Errors: 0
+mvn -o -B test                        Tests run: 108, Failures: 0, Errors: 0
 flutter analyze                       No issues found
 flutter test                          All tests passed (140)
 npm run build（admin）                 608 modules transformed, built
@@ -1270,3 +1272,58 @@ flutter build apk --debug
 1. 当前是站内消息，不接 APNs / FCM，不承诺后台实时推送；
 2. 消息的生成以账号首次读取和系统说明为主，尚未接入邮件或运营后台群发；
 3. 未登录状态的消息只存在本机内存，重启后按未读重新展示。
+
+---
+
+## 24. T30 执行结果（社区旅记后端底座）
+
+> 社区功能是分阶段推进。本轮只完成第 1 阶段后端，Flutter 社区页和管理台审核页
+> 仍未开发，不能把当前状态描述成“社区已上线”。
+
+### 24.1 新增数据模型
+
+| 表 | 用途 |
+| --- | --- |
+| `community_post` | 旅记主体、作者、关联行程、公开范围、审核状态、点赞和浏览量 |
+| `community_post_image` | 旅记图片 URL 与排序 |
+| `community_like` | 用户对旅记的点赞，唯一约束防止重复 |
+| `community_report` | 用户举报与管理员处理状态 |
+
+### 24.2 新增接口
+
+- `GET /api/community/posts`：公开已通过旅记，分页、城市/标签筛选；
+- `GET /api/community/posts/{id}`：公开详情，作者可查看自己的未通过旅记；
+- `GET /api/community/posts/mine`：自己的全部旅记；
+- `POST/PATCH/DELETE /api/community/posts`：发布、编辑、删除；
+- `POST/DELETE /api/community/posts/{id}/like`：点赞与取消；
+- `POST /api/community/posts/{id}/report`：举报；
+- `/api/admin/community/posts`：待审核、通过、驳回、下架；
+- `/api/admin/community/reports`：举报处理。
+
+### 24.3 安全与边界
+
+- 浏览公开旅记不需要登录，发布、编辑、点赞和举报必须登录；
+- 只能关联本人行程；
+- 只有 `APPROVED + PUBLIC` 的旅记可以被点赞和举报；
+- 同一用户不能重复点赞、重复举报同一旅记；
+- 不能举报自己的旅记；
+- 图片数量最多 9 张，图片地址只允许 HTTPS、HTTP 或 `/media/`；
+- 审核动作写操作日志；
+- 本轮不实现图片上传和 EXIF 清理：真正接 Flutter 发布流程前必须补上，
+  否则用户照片的拍摄位置可能泄露。
+
+### 24.4 验证结果
+
+```text
+mvn -o -B test        Tests run: 108, Failures: 0, Errors: 0
+                      （新增 CommunityServiceTest 4 项）
+```
+
+### 24.5 下一阶段
+
+按 [`docs/COMMUNITY_PLAN.md`](COMMUNITY_PLAN.md) 进入第 2 阶段：
+
+- 先做 Flutter 社区信息流和详情页；
+- 再做发布流程；
+- 最后做管理台审核页；
+- 发布流程前补图片上传、EXIF 清理和发布频率限制。

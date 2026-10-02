@@ -9,7 +9,7 @@
 如果文档与代码不一致，那是文档的错，请按代码修文档。
 
 维护约定：**已经对外可用的接口不删、不改语义，只做向后兼容的追加**；
-每次改动在文末「§14 变更记录」补一行。
+每次改动在文末「§15 变更记录」补一行。
 
 ## 0. 怎么用这份文档
 
@@ -899,7 +899,117 @@ file=<二进制>
 
 ---
 
-## 14. 变更记录
+## 14. 社区接口
+
+社区旅记。浏览公开内容不要求登录；发布、编辑、删除、点赞和举报必须登录。
+
+### 14.1 公开信息流 `GET /api/community/posts`
+
+查询参数：
+
+| 参数 | 默认 | 说明 |
+| --- | --- | --- |
+| `city` | 无 | 按城市筛选 |
+| `tag` | 无 | 按标签包含匹配 |
+| `page` | 1 | 从 1 开始 |
+| `size` | 10 | 服务端夹到 1—50 |
+
+只返回 `status=APPROVED` 且 `visibility=PUBLIC` 的旅记。响应：
+
+```json
+{
+  "items": [
+    {
+      "id": "…",
+      "authorName": "河洛旅人",
+      "authorAvatarKey": "celadon",
+      "tripPlanId": "…",
+      "title": "洛阳两日：沿着伊河看石窟",
+      "content": "…",
+      "city": "洛阳",
+      "tags": "历史文化,博物馆",
+      "visibility": "PUBLIC",
+      "status": "APPROVED",
+      "imageUrls": ["/media/…"],
+      "likeCount": 12,
+      "viewCount": 80,
+      "likedByMe": false,
+      "createdAt": "…",
+      "publishedAt": "…"
+    }
+  ],
+  "page": 1,
+  "size": 10,
+  "total": 1,
+  "hasMore": false
+}
+```
+
+### 14.2 旅记详情 `GET /api/community/posts/{id}`
+
+- 已通过的公开旅记所有人可看；
+- 作者可以查看自己处于 `PENDING / REJECTED / TAKEN_DOWN` 的旅记；
+- 其他用户看不到未公开内容，统一返回 404。
+
+### 14.3 我的旅记 `GET /api/community/posts/mine`
+
+需要登录，返回当前用户的全部旅记，包括待审核、驳回和下架状态。
+
+### 14.4 发布与编辑
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/community/posts` | 发布旅记，初始状态 `PENDING` |
+| PATCH | `/api/community/posts/{id}` | 作者编辑，重新进入 `PENDING` |
+| DELETE | `/api/community/posts/{id}` | 作者删除 |
+
+请求示例：
+
+```json
+{
+  "title": "洛阳两日：沿着伊河看石窟",
+  "content": "把行程里的时间和预算都收起来，只留下路线与感受。",
+  "city": "洛阳",
+  "tags": "历史文化,博物馆",
+  "visibility": "PUBLIC",
+  "tripPlanId": "…",
+  "imageUrls": ["/media/…"]
+}
+```
+
+约束：
+
+- 标题 ≤ 80，正文 ≤ 3000，城市 ≤ 80，标签 ≤ 200；
+- 最多 9 张图片；
+- `visibility` 只允许 `PUBLIC / PRIVATE`；
+- 关联行程必须是本人行程，否则返回 404；
+- 图片地址只允许 `https://`、`http://` 或 `/media/`。
+
+### 14.5 点赞与举报
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/community/posts/{id}/like` | 点赞，重复调用不重复计数 |
+| DELETE | `/api/community/posts/{id}/like` | 取消点赞 |
+| POST | `/api/community/posts/{id}/report` | `{ "reason": "…" }`，同一用户对同一旅记只允许一次 |
+
+- 只有已通过且公开的旅记可以被点赞 / 举报；
+- 不能举报自己的旅记。
+
+### 14.6 管理端审核 `/api/admin/community`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/posts?status=PENDING&page=1&size=10` | 按状态查看待审核旅记 |
+| PATCH | `/posts/{id}/status` | `{ "status": "APPROVED|REJECTED|TAKEN_DOWN|PENDING", "note": "…" }` |
+| GET | `/reports?status=OPEN&page=1&size=10` | 查看举报 |
+| PATCH | `/reports/{id}` | `{ "status": "HANDLED|IGNORED", "note": "…" }` |
+
+审核通过时写入 `publishedAt`；所有审核和处理动作写入管理员操作日志。
+
+---
+
+## 15. 变更记录
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
@@ -910,6 +1020,7 @@ file=<二进制>
 | 2026-10-02 | v0.3.4-apis | 新增 Mock 数据覆盖管理（§10.9）与 `DemoScenario` 数据模型（§11.5） |
 | 2026-10-02 | v0.3.5-apis | 账号资料、改密、邮箱验证、退出所有设备与删除账号接口（§2.5） |
 | 2026-10-02 | v0.3.6-apis | 新增服务端消息中心（§9.5）；登录后已读状态跟账号同步 |
+| 2026-10-02 | v0.3.7-apis | 新增社区旅记后端底座（§14）：发布、浏览、点赞、举报与管理员审核 |
 
 ---
 
