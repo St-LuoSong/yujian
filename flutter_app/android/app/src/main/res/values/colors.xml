@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette shared with the Flutter theme, see flutter_app/lib/app.dart.
+         中原青黛 #174A47 / 宣纸白 #F7F4EC -->
+    <color name="yujian_teal">#FF174A47</color>
+    <color name="yujian_paper">#FFF7F4EC</color>
+</resources>

@@ -1,0 +1,56 @@
+// ---------------------------------------------------------------------------
+// Gradle init script: redirect Google's Maven repository to a mirror.
+//
+// Why this exists
+//   This build machine cannot reach maven.google.com / dl.google.com (checked
+//   over both IPv4 and IPv6, both time out) while the Aliyun mirror serves the
+//   same artifacts, including the AGP 9.1.0 that the Flutter 3.47.5 template
+//   requires. Gradle has no built in "repository mirror" setting, so the
+//   redirect lives here, in the environment, instead of being hard coded in
+//   the project build files. That keeps flutter_app/android identical to a
+//   stock `flutter create` output and portable to networks with direct access.
+//
+// Scope
+//   Every settings and every project of the build tree, including the included
+//   build "<flutter sdk>/packages/flutter_tools/gradle". That build ships its
+//   own settings.gradle.kts with a hard coded google() and with
+//   RepositoriesMode.FAIL_ON_PROJECT_REPOS, so it cannot be fixed from the app
+//   project and must not be edited inside the Flutter SDK checkout.
+//
+// Only Google Maven is rewritten. Maven Central, the Gradle Plugin Portal and
+// the Flutter storage host are reachable from here and stay authoritative.
+//
+// Install
+//   toolchain.cmd copies this file to
+//       %GRADLE_USER_HOME%\init.d\alimaven-google.init.gradle
+//   Delete that copy (or this file) to build against the official repository.
+// ---------------------------------------------------------------------------
+
+final String GOOGLE_MIRROR = 'https://maven.aliyun.com/repository/google'
+
+def isGoogleMavenUrl = { String url ->
+    url.startsWith('https://dl.google.com/dl/android/maven2') ||
+        url.startsWith('https://maven.google.com')
+}
+
+def redirectGoogleMaven = { repositories ->
+    repositories.withType(org.gradle.api.artifacts.repositories.MavenArtifactRepository).configureEach { repository ->
+        if (isGoogleMavenUrl(repository.url.toString())) {
+            repository.setUrl(GOOGLE_MIRROR)
+        }
+    }
+}
+
+beforeSettings { settings ->
+    redirectGoogleMaven(settings.pluginManagement.repositories)
+    redirectGoogleMaven(settings.dependencyResolutionManagement.repositories)
+}
+
+settingsEvaluated { settings ->
+    redirectGoogleMaven(settings.pluginManagement.repositories)
+    redirectGoogleMaven(settings.dependencyResolutionManagement.repositories)
+}
+
+allprojects { project ->
+    redirectGoogleMaven(project.repositories)
+}

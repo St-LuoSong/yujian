@@ -1,0 +1,49 @@
+# Flutter
+flutter_app/.dart_tool/
+flutter_app/build/
+flutter_app/.flutter-plugins*
+flutter_app/android/.kotlin/
+
+# Java
+backend/server/target/
+backend/server/data/
+backend/server/package-lock.json
+
+# Node
+backend/admin/node_modules/
+backend/admin/dist/
+
+# Local npm cache / scratch directories used by tooling
+.npm-cache/
+.patch-tmp/
+
+# Local backend archive created during migration; never part of the source tree.
+backend.zip
+
+# Local Android / Flutter toolchain (machine specific, never committed).
+# See docs/DEVELOPMENT_ENVIRONMENT.md for how to install it.
+tooling/flutter/
+tooling/android-sdk/
+tooling/.gradle/
+tooling/.android/
+tooling/.pub-cache/
+.flutter_template/
+
+# IDE and local environment
+.idea/
+.vscode/
+*.iml
+.env
+.env.*
+!.env.example
+
+# Local secrets loaded by scripts/run-server-dev.cmd (BAIDU_MAP_AK, LLM keys...).
+scripts/local.env
+
+# Local toolchain helper output
+scripts/user-env-backup.reg
+
+# Android release signing
+flutter_app/android/key.properties
+*.jks
+*.keystore

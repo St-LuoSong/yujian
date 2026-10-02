@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network policy for debug builds.
+
+  Debug runs point at a locally hosted Spring Boot instance, whose default base
+  URL is plain HTTP (http://10.0.2.2:8080/api on the Android emulator). Cleartext
+  is therefore allowed here, and user installed CAs are trusted so an HTTPS
+  debugging proxy can be attached.
+
+  This file only overrides the release policy for the debug source set; it is
+  never merged into a release APK.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,97 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: yujian-mysql
+    # 本机唯一数据库：Docker Desktop 起来它就跟着起来，不用每次手动 up。
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: yujian_travel
+      MYSQL_USER: ${MYSQL_USER:-yujian}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-yujian_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-yujian_root_password}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  server:
+    build: ./server
+    container_name: yujian-server
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      PORT: 8080
+      MYSQL_URL: jdbc:mysql://mysql:3306/yujian_travel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      MYSQL_USER: ${MYSQL_USER:-yujian}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-yujian_dev_password}
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-development-secret}
+      APP_MODE: ${APP_MODE:-mock}
+      # 外部工具数据源：live 优先真实接口（天气免费且无需密钥；路线需 BAIDU_MAP_AK），
+      # mock 表示全部使用本地演示数据，适合无外网的现场演示。
+      APP_TOOLS_MODE: ${APP_TOOLS_MODE:-live}
+      BAIDU_MAP_AK: ${BAIDU_MAP_AK:-}
+      WEATHER_PROVIDER: ${WEATHER_PROVIDER:-open-meteo}
+      # 跨城车次。保持 reference 时容器数量不变；要接真实 12306 就设成 12306-mcp
+      # 并启动下面的 mcp-12306 服务（不再抓网页，由官方 MCP 服务负责查询）。
+      RAILWAY_PROVIDER: ${RAILWAY_PROVIDER:-reference}
+      RAILWAY_MCP_URL: ${RAILWAY_MCP_URL:-http://mcp-12306:8000/mcp}
+      TICKET_PROVIDER: ${TICKET_PROVIDER:-catalog}
+      # 反向代理或局域网访问时必须显式配置，否则上传的图片地址会推导成容器内的 localhost。
+      MEDIA_BASE_URL: ${MEDIA_BASE_URL:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      SHARE_BASE_URL: ${SHARE_BASE_URL:-http://localhost:8080/share}
+      SMTP_ENABLED: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # 12306 车次查询（独立进程，只有需要实时车次时才启动）：
+  #   docker compose --profile railway up -d mcp-12306
+  # 然后把 RAILWAY_PROVIDER 设为 12306-mcp。Spring Boot 通过 MCP 协议调用它，
+  # APK 与运营台都拿不到这个地址，也拿不到任何铁路凭证。
+  mcp-12306:
+    image: drfccv/mcp-server-12306:latest
+    container_name: yujian-12306
+    profiles: ["railway"]
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+      LOG_LEVEL: INFO
+    ports:
+      - "${RAILWAY_MCP_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  admin:
+    build: ./admin
+    container_name: yujian-admin
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mysql-data:

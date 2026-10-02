@@ -1,0 +1,21 @@
+# Analyzer configuration for the 豫见智旅 Flutter client.
+#
+# `flutter_lints` is declared as a dev dependency, but the rule set only takes
+# effect once it is included here. Without this file `flutter analyze` falls
+# back to the bare default rules and quietly skips the project conventions.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Debug leftovers and unguarded context use after an await are treated as
+    # build breakers because both ship straight into the release APK.
+    avoid_print: error
+    use_build_context_synchronously: error
+  exclude:
+    - build/**
+    - android/**
+
+linter:
+  rules:
+    - prefer_final_locals
+    - unawaited_futures

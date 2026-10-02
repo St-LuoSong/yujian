@@ -1,0 +1,26 @@
+name: yujian_travel
+description: 豫见智旅 Android 客户端
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  dio: ^5.7.0
+  share_plus: ^10.1.2
+  flutter_secure_storage: ^9.2.2
+  cached_network_image: ^3.4.1
+  path_provider: ^2.1.5
+  geolocator: ^14.0.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  # 足迹卡片的河南省底图（自带轮廓与 18 个地市名）。
+  # 素材放在 assets/ 下而不是写在 Dart 里，换图只要替换文件。
+  assets:
+    - assets/images/

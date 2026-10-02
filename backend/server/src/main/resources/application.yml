@@ -1,0 +1,149 @@
+server:
+  port: ${PORT:8080}
+spring:
+  application:
+    name: yujian-travel-server
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  servlet:
+    multipart:
+      # 单文件与单请求上限；应用层还会按 app.media.max-size-mb 再校验一次。
+      max-file-size: ${MEDIA_MAX_FILE_SIZE:10MB}
+      max-request-size: ${MEDIA_MAX_REQUEST_SIZE:12MB}
+  datasource:
+    url: jdbc:h2:file:./data/yujian;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Shanghai
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    test-connection: false
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+management:
+  health:
+    # SMTP 是首版预留能力，未配置时不应该让整个服务健康检查变成 DOWN。
+    mail:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  mode: ${APP_MODE:mock}
+  trial-limit: ${TRIAL_LIMIT:1}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  jwt:
+    secret: ${JWT_SECRET:eXVqaWFuLXRyYXZlbC1kZXYtc2VjcmV0LWtleS0yMDI2}
+    access-minutes: ${JWT_ACCESS_MINUTES:120}
+    refresh-days: ${JWT_REFRESH_DAYS:7}
+  smtp:
+    enabled: ${SMTP_ENABLED:false}
+    from: ${SMTP_FROM:no-reply@yujian.local}
+    mock-code-log: ${SMTP_MOCK_CODE_LOG:true}
+  share:
+    base-url: ${SHARE_BASE_URL:http://localhost:8080/share}
+    default-expire-days: ${SHARE_DEFAULT_EXPIRE_DAYS:7}
+  media:
+    storage-dir: ${MEDIA_STORAGE_DIR:./data/uploads}
+    # 模拟器（10.0.2.2）或反向代理场景必须显式配置，否则会推导出 localhost。
+    base-url: ${MEDIA_BASE_URL:}
+    max-size-mb: ${MEDIA_MAX_SIZE_MB:8}
+    max-dimension: ${MEDIA_MAX_DIMENSION:6000}
+  # 外部工具（天气 / 地图 / 铁路）的数据源。
+  # 取到真实数据就用真实数据并如实标注；取不到则带原因降级到演示数据，
+  # APK 的「依据」页与运营统计都能看到每一条的真实来源与状态。
+  tools:
+    # live：优先真实数据源，失败才降级；mock：全部使用本地演示数据（无外网离线演示）。
+    mode: ${APP_TOOLS_MODE:live}
+    timeout-seconds: ${TOOLS_TIMEOUT_SECONDS:4}
+    baidu:
+      # 百度地图开放平台 AK。留空时路线规划与底图直接使用演示数据，且不会发起网络请求。
+      api-key: ${BAIDU_MAP_AK:}
+      base-url: ${BAIDU_MAP_BASE_URL:https://api.map.baidu.com}
+      # 行程地图：底图由服务端带 AK 取回再转发给 APK，AK 因此不进安装包。
+      # 底图变化很慢，缓存 12 小时可以省下大量配额；失败时客户端退回文字路线。
+      static-map-path: ${BAIDU_STATIC_MAP_PATH:/staticimage/v2}
+      map-cache-minutes: ${BAIDU_MAP_CACHE_MINUTES:720}
+      map-width: ${BAIDU_MAP_WIDTH:1024}
+      map-height: ${BAIDU_MAP_HEIGHT:768}
+      map-timeout-seconds: ${BAIDU_MAP_TIMEOUT_SECONDS:8}
+      map-max-markers: ${BAIDU_MAP_MAX_MARKERS:12}
+      map-min-confidence: ${BAIDU_MAP_MIN_CONFIDENCE:20}
+    weather:
+      # open-meteo：免费且无需密钥，可以直接跑通「实时数据」链路；none：只用演示数据。
+      provider: ${WEATHER_PROVIDER:open-meteo}
+      base-url: ${WEATHER_BASE_URL:https://api.open-meteo.com}
+      cache-minutes: ${WEATHER_CACHE_MINUTES:30}
+    railway:
+      # 12306-mcp：调用独立部署的 mcp-server-12306（Streamable HTTP），车次与余票来自官方接口；
+      # reference：内置参考时刻表，明确标注为「非实时」。
+      # 两种模式都不抓取 12306 网页、不保存证件信息、不代购。
+      provider: ${RAILWAY_PROVIDER:reference}
+      mcp-url: ${RAILWAY_MCP_URL:}
+      # 余票变化快，实时车次必须短缓存。
+      cache-minutes: ${RAILWAY_CACHE_MINUTES:30}
+    ticket:
+      # catalog：用运营台维护的景区内容库参考价（系统资料）；
+      # smart-buy：预留给外部比价服务，未接入适配器时会带原因降级为内容库价。
+      provider: ${TICKET_PROVIDER:catalog}
+      base-url: ${TICKET_BASE_URL:}
+  llm:
+    enabled: ${LLM_ENABLED:false}
+    temperature: ${LLM_TEMPERATURE:0.3}
+    timeout-seconds: ${LLM_TIMEOUT_SECONDS:60}
+    # One entry per vendor. Enable several and they are tried in priority order;
+    # the first one that answers wins, and the mock engine is always last.
+    # API keys are read from the environment only and never stored in the repo.
+    providers:
+      openai:
+        enabled: ${LLM_OPENAI_ENABLED:false}
+        display-name: OpenAI
+        base-url: ${LLM_OPENAI_BASE_URL:https://api.openai.com/v1}
+        api-key: ${LLM_OPENAI_API_KEY:}
+        model: ${LLM_OPENAI_MODEL:gpt-4o-mini}
+        priority: ${LLM_OPENAI_PRIORITY:10}
+      deepseek:
+        enabled: ${LLM_DEEPSEEK_ENABLED:false}
+        display-name: DeepSeek
+        base-url: ${LLM_DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+        api-key: ${LLM_DEEPSEEK_API_KEY:}
+        model: ${LLM_DEEPSEEK_MODEL:deepseek-chat}
+        priority: ${LLM_DEEPSEEK_PRIORITY:20}
+      kimi:
+        enabled: ${LLM_KIMI_ENABLED:false}
+        display-name: Kimi (Moonshot)
+        base-url: ${LLM_KIMI_BASE_URL:https://api.moonshot.cn/v1}
+        api-key: ${LLM_KIMI_API_KEY:}
+        model: ${LLM_KIMI_MODEL:moonshot-v1-8k}
+        priority: ${LLM_KIMI_PRIORITY:30}
+      qwen:
+        enabled: ${LLM_QWEN_ENABLED:false}
+        display-name: 通义千问
+        base-url: ${LLM_QWEN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+        api-key: ${LLM_QWEN_API_KEY:}
+        model: ${LLM_QWEN_MODEL:qwen-plus}
+        priority: ${LLM_QWEN_PRIORITY:40}
+  admin:
+    # Optional operator bootstrap. Leave empty in a repository checked out for
+    # development; set ADMIN_USERNAME / ADMIN_PASSWORD to enable the console.
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
+    email: ${ADMIN_EMAIL:}

@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://mysql:3306/yujian_travel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${MYSQL_USER:yujian}
+    password: ${MYSQL_PASSWORD:yujian_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: update
+app:
+  smtp:
+    enabled: ${SMTP_ENABLED:false}
+    mock-code-log: false

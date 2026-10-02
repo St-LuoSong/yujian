@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch splash.
+     Uses the 宣纸白 (#F7F4EC) paper tone from the design system so the jump
+     into the first Flutter frame is seamless. Modify this file if a licensed
+     full bleed Henan hero image becomes available. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/yujian_paper" />
+
+    <!-- You can insert your own image assets here -->
+    <!-- <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@mipmap/launch_image" />
+    </item> -->
+</layer-list>
