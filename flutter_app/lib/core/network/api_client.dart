@@ -87,9 +87,15 @@ class ApiClient {
   /// Reads an endpoint that answers with a single JSON object.
   Future<Map<String, dynamic>> getJsonObject(
     String path, {
+    Map<String, dynamic>? query,
     Map<String, dynamic>? headers,
   }) async {
-    final data = (await get<Map<String, dynamic>>(path, headers: headers)).data;
+    final data = (await get<Map<String, dynamic>>(
+      path,
+      query: query,
+      headers: headers,
+    ))
+        .data;
     if (data == null) {
       throw ApiFailure.parse(StateError('$path 返回空响应'));
     }
@@ -121,6 +127,24 @@ class ApiClient {
     Map<String, dynamic>? headers,
   }) async {
     final response = await patch<Map<String, dynamic>>(
+      path,
+      data: body,
+      headers: headers,
+    );
+    final data = response.data;
+    if (data == null) {
+      throw ApiFailure.parse(StateError('$path 返回空响应'));
+    }
+    return data;
+  }
+
+  /// Deletes a resource and reads a single JSON object back.
+  Future<Map<String, dynamic>> deleteJsonObject(
+    String path, {
+    Object? body,
+    Map<String, dynamic>? headers,
+  }) async {
+    final response = await delete<Map<String, dynamic>>(
       path,
       data: body,
       headers: headers,

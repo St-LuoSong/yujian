@@ -7,8 +7,9 @@ import '../core/network/session_interceptor.dart';
 import '../core/storage/local_cache.dart';
 import '../core/storage/server_endpoint_store.dart';
 import '../core/storage/session_store.dart';
-import '../data/repositories/travel_repository.dart';
 import '../data/repositories/account_repository.dart';
+import '../data/repositories/community_repository.dart';
+import '../data/repositories/travel_repository.dart';
 import 'bootstrap.dart';
 
 /// Overridden in `main()` once the platform services are ready.
@@ -89,4 +90,8 @@ final accountRepositoryProvider = Provider<AccountRepository>(
     client: ref.watch(apiClientProvider),
     session: ref.watch(sessionStoreProvider),
   ),
+);
+
+final communityRepositoryProvider = Provider<CommunityRepository>(
+  (ref) => CommunityRepository(client: ref.watch(apiClientProvider)),
 );

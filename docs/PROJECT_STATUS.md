@@ -9,7 +9,7 @@ T20 服务端接口文档（`docs/API.md`）、T21 定位 + 附近景点（全�
 T22 铁路票价与中转换乘进入规划链路、T23 公开测试与容器部署收口、
 T24 管理台内容运营视图、T25 提示词版本管理、T26 APK 运行时服务器地址、
 T27 Mock 数据管理、T28 个人信息与账号安全、T29 服务端消息中心、
-T30 社区旅记后端底座
+T30 社区旅记后端底座、T31 社区 Flutter 浏览体验
 
 > 这份文档只回答两个问题：**现在能演示什么**、**还差什么**。
 > 所有"已完成"都指的是**本机实跑验证过**，不是"代码写了"。
@@ -64,6 +64,7 @@ APK、后端、管理台三条线都能跑起来，主业务闭环（发现 → 
 | 二十九 | T28 个人信息与账号安全 | 完成 | 昵称/预设头像、修改密码、邮箱验证、退出所有设备、删除账号；收藏统一改为星标；见本文第 22 节 |
 | 三十 | T29 服务端消息中心 | 完成 | 登录后消息与已读状态跟账号走；未登录仍使用本机说明；「我的」页只保留设置里的退出登录；见本文第 23 节 |
 | 三十一 | T30 社区旅记后端底座 | 完成 | 旅记发布/编辑/删除、公开信息流、详情、点赞、举报和管理员审核接口；见本文第 24 节 |
+| 三十二 | T31 社区 Flutter 浏览体验 | 完成 | 底部「旅记」入口、信息流分页、城市/主题筛选、详情、点赞和举报；见本文第 25 节 |
 
 ## 3. 现在真实可用的能力
 
@@ -119,9 +120,9 @@ node scripts\verify-map.mjs           通过 23 项，失败 0 项
 node scripts\verify-llm.mjs           通过 12 项，失败 0 项（只花 1 次模型调用）
 mvn -o -B test                        Tests run: 108, Failures: 0, Errors: 0
 flutter analyze                       No issues found
-flutter test                          All tests passed (140)
+flutter test                          All tests passed (144)
 npm run build（admin）                 608 modules transformed, built
-flutter build apk --debug             app-debug.apk   193.9MB（T29 重新构建，见第 23 节）
+flutter build apk --debug             app-debug.apk   193.9MB（T31 重新构建，见第 25 节）
 flutter build apk --release           app-release.apk 52.6MB（未传 API_BASE_URL，启动即提示配置失败，属刻意设计）
 ```
 
@@ -1327,3 +1328,44 @@ mvn -o -B test        Tests run: 108, Failures: 0, Errors: 0
 - 再做发布流程；
 - 最后做管理台审核页；
 - 发布流程前补图片上传、EXIF 清理和发布频率限制。
+
+---
+
+## 25. T31 执行结果（社区 Flutter 浏览体验）
+
+### 25.1 新增页面与入口
+
+- 底部导航改为：发现 / 旅记 / 行程 / 我的；
+- 旅记页首次切换进入时才加载，避免后台无意义请求；
+- 信息流支持城市与主题筛选、下拉刷新和滚动分页；
+- 详情页展示多图、正文、作者、城市、主题、发布时间；
+- 点赞使用星标实心 / 空心反馈，未登录时先进入登录；
+- 举报使用底部原因选择器，提交后由管理员处理。
+
+### 25.2 代码落点
+
+| 文件 | 职责 |
+| --- | --- |
+| `models/community_models.dart` | CommunityPost / CommunityPage 解析 |
+| `data/repositories/community_repository.dart` | 信息流、详情、点赞、举报请求 |
+| `screens/community_screen.dart` | 旅记信息流与详情页 |
+| `screens/home_screen.dart` | 四入口底部导航与旅记 tab |
+| `app/providers.dart` | communityRepositoryProvider |
+
+### 25.3 验证结果
+
+```text
+flutter analyze       No issues found
+flutter test          All tests passed (144)
+                      （新增社区仓库测试 3 + 社区页面 widget 测试 1）
+flutter build apk --debug
+  √ app-debug.apk，193,919,585 bytes，Gradle assembleDebug 15.2s
+```
+
+### 25.4 当前边界
+
+1. 旅记图片仍依赖 `/media/` 或 HTTPS URL，尚未开放用户端上传；
+2. 发布旅记表单尚未实现，下一阶段补；
+3. 管理台审核页尚未实现，下一阶段补；
+4. 社区信息流当前不做本地离线缓存，失败时明确提示；
+5. 评论、关注、私信不进入首版范围。

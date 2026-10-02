@@ -18,6 +18,7 @@ import '../data/repositories/travel_repository.dart';
 import '../models/account_models.dart';
 import '../models/travel_models.dart';
 import 'additional_screens.dart';
+import 'community_screen.dart';
 import 'messages_screen.dart';
 import 'nearby_screen.dart';
 import 'planner_screen.dart';
@@ -25,8 +26,8 @@ import 'profile_screens.dart';
 
 /// App shell.
 ///
-/// Three destinations: 发现 / 行程 / 我的. v0.2 had four, but 规划 and 行程 were
-/// the same object at different moments, so they share one tab now.
+/// Four destinations: 发现 / 旅记 / 行程 / 我的.
+/// 规划仍然和行程共用一个 tab，避免底部导航被拆得过碎。
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -36,8 +37,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const int _discoverTab = 0;
-  static const int _journeyTab = 1;
-  static const int _profileTab = 2;
+  static const int _communityTab = 1;
+  static const int _journeyTab = 2;
+  static const int _profileTab = 3;
 
   static const List<NavigationDestination> _destinations =
       <NavigationDestination>[
@@ -45,6 +47,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       icon: Icon(Icons.explore_outlined),
       selectedIcon: Icon(Icons.explore),
       label: '发现',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.auto_stories_outlined),
+      selectedIcon: Icon(Icons.auto_stories),
+      label: '旅记',
     ),
     NavigationDestination(
       icon: Icon(Icons.route_outlined),
@@ -103,6 +110,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onScene: _startScene,
                 onOpenProfile: () => _selectTab(_profileTab),
               ),
+              CommunityScreen(active: tab == _communityTab),
               JourneyScreen(
                 key: ValueKey<int>(_journeyEpoch),
                 repository: repository,
