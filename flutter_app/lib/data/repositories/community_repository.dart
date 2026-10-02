@@ -58,6 +58,20 @@ class CommunityRepository {
     return CommunityPost.fromJson(data);
   }
 
+  Future<CommunityPage> fetchMine() async {
+    final data = await _client.getJsonObject(
+      '/community/posts/mine',
+      query: <String, dynamic>{'page': 1, 'size': 50},
+    );
+    return CommunityPage.fromJson(data);
+  }
+
+  Future<void> deletePost(String id) async {
+    await _client.sendNoContent(
+      () => _client.delete<dynamic>('/community/posts/$id'),
+    );
+  }
+
   Future<CommunityPost> like(String id) async {
     final data = await _client.postJsonObject('/community/posts/$id/like');
     return CommunityPost.fromJson(data);

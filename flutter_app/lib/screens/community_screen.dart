@@ -455,9 +455,14 @@ class _CommunityCard extends StatelessWidget {
 }
 
 class CommunityDetailScreen extends ConsumerStatefulWidget {
-  const CommunityDetailScreen({super.key, required this.initial});
+  const CommunityDetailScreen({
+    super.key,
+    required this.initial,
+    this.ownerMode = false,
+  });
 
   final CommunityPost initial;
+  final bool ownerMode;
 
   @override
   ConsumerState<CommunityDetailScreen> createState() =>
@@ -582,29 +587,32 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
             ),
           ],
           const SizedBox(height: 22),
-          SurfaceCard(
-            color: AppColors.surfaceTint,
-            shadow: const <BoxShadow>[],
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _likeBusy ? null : _toggleLike,
-                    icon: Icon(
-                      _post.likedByMe ? Icons.star : Icons.star_border,
-                      color: _post.likedByMe ? AppColors.amber : null,
+          if (widget.ownerMode)
+            _OwnerStatusCard(post: _post)
+          else
+            SurfaceCard(
+              color: AppColors.surfaceTint,
+              shadow: const <BoxShadow>[],
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _likeBusy ? null : _toggleLike,
+                      icon: Icon(
+                        _post.likedByMe ? Icons.star : Icons.star_border,
+                        color: _post.likedByMe ? AppColors.amber : null,
+                      ),
+                      label: Text(_post.likedByMe ? '已收藏这份旅记' : '收藏这份旅记'),
                     ),
-                    label: Text(_post.likedByMe ? '已收藏这份旅记' : '收藏这份旅记'),
                   ),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: _reportBusy ? null : _report,
-                  child: const Text('举报'),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  OutlinedButton(
+                    onPressed: _reportBusy ? null : _report,
+                    child: const Text('举报'),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -680,6 +688,54 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(text)));
+  }
+}
+
+class _OwnerStatusCard extends StatelessWidget {
+  const _OwnerStatusCard({required this.post});
+
+  final CommunityPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final String title = switch (post.status) {
+      'PENDING' => '审核中',
+      'APPROVED' => '已通过',
+      'REJECTED' => '已驳回',
+      'TAKEN_DOWN' => '已下架',
+      _ => post.status,
+    };
+    final String note = post.moderationNote == null || post.moderationNote!.isEmpty
+        ? '暂无审核说明。'
+        : post.moderationNote!;
+    return SurfaceCard(
+      color: post.status == 'REJECTED' || post.status == 'TAKEN_DOWN'
+          ? AppColors.riskSurface
+          : AppColors.surfaceTint,
+      shadow: const <BoxShadow>[],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            '审核状态：$title',
+            style: const TextStyle(
+              fontSize: AppTypography.body,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            note,
+            style: const TextStyle(
+              fontSize: AppTypography.caption,
+              color: AppColors.inkSoft,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

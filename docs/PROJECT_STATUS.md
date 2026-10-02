@@ -10,7 +10,7 @@ T22 铁路票价与中转换乘进入规划链路、T23 公开测试与容器部
 T24 管理台内容运营视图、T25 提示词版本管理、T26 APK 运行时服务器地址、
 T27 Mock 数据管理、T28 个人信息与账号安全、T29 服务端消息中心、
 T30 社区旅记后端底座、T31 社区 Flutter 浏览体验、T32 社区发布流程
-T33 社区管理台审核
+T33 社区管理台审核、T34 我的旅记状态页
 
 > 这份文档只回答两个问题：**现在能演示什么**、**还差什么**。
 > 所有"已完成"都指的是**本机实跑验证过**，不是"代码写了"。
@@ -68,6 +68,7 @@ APK、后端、管理台三条线都能跑起来，主业务闭环（发现 → 
 | 三十二 | T31 社区 Flutter 浏览体验 | 完成 | 底部「旅记」入口、信息流分页、城市/主题筛选、详情、点赞和举报；见本文第 25 节 |
 | 三十三 | T32 社区发布流程 | 完成 | 从本人行程发布旅记、1—9 张图片、公开范围、服务端去 EXIF、提交审核；见本文第 26 节 |
 | 三十四 | T33 社区管理台审核 | 完成 | 待审核队列、通过/驳回/下架、举报处理与操作日志；见本文第 27 节 |
+| 三十五 | T34 我的旅记状态页 | 完成 | APK 个人中心可查看审核中、已通过、已驳回、已下架及审核说明；见本文第 28 节 |
 
 ## 3. 现在真实可用的能力
 
@@ -123,9 +124,9 @@ node scripts\verify-map.mjs           通过 23 项，失败 0 项
 node scripts\verify-llm.mjs           通过 12 项，失败 0 项（只花 1 次模型调用）
 mvn -o -B test                        Tests run: 110, Failures: 0, Errors: 0
 flutter analyze                       No issues found
-flutter test                          All tests passed (144)
+flutter test                          All tests passed (146)
 npm run build（admin）                 608 modules transformed, built
-flutter build apk --debug             app-debug.apk   194.1MB（T32 重新构建，见第 26 节）
+flutter build apk --debug             app-debug.apk   194.1MB（T34 重新构建，见第 28 节）
 flutter build apk --release           app-release.apk 52.6MB（未传 API_BASE_URL，启动即提示配置失败，属刻意设计）
 ```
 
@@ -1474,3 +1475,36 @@ npm run build（admin）
 - 管理台举报处理当前使用系统输入框填写处理说明，后续可改成抽屉表单；
 - 社区内容批量审核和审核人筛选尚未实现；
 - 评论、关注、私信仍不在首版范围。
+
+---
+
+## 28. T34 执行结果（我的旅记状态页）
+
+### 28.1 用户端入口
+
+「我的」页新增「我的旅记」入口，作者可以持续查看自己的发布状态，不再只在提交弹窗里看到一次“已提交审核”。
+
+### 28.2 页面能力
+
+- 全部 / 审核中 / 已通过 / 已驳回筛选；
+- 旅记标题、摘要、城市、公开范围、点赞数和审核说明；
+- 点击进入作者详情，显示审核状态和审核说明；
+- 作者详情隐藏点赞和举报，避免对自己的未公开内容产生误导操作；
+- 支持删除自己的旅记；
+- 空态提供「写第一篇旅记」入口。
+
+### 28.3 验证结果
+
+```text
+flutter analyze       No issues found
+flutter test          All tests passed (146)
+                      （新增 owner repository 测试 1 + 页面 widget 测试 1）
+flutter build apk --debug
+  √ app-debug.apk，194,092,193 bytes，Gradle assembleDebug 16.5s
+```
+
+### 28.4 当前边界
+
+1. `fetchMine` 当前一次读取最近 50 篇，超过后再补分页；
+2. 作者端暂不支持编辑旅记，只能删除后重新发布；
+3. 审核状态是通过管理台审核动作实时变化的，不会主动推送通知。

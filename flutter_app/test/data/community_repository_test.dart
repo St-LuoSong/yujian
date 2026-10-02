@@ -65,6 +65,34 @@ void main() {
 
     expect(adapter.requests, hasLength(1));
   });
+
+  test('my posts and deletion use the owner endpoints', () async {
+    final adapter = RecordingAdapter((options, _) async {
+      if (options.method == 'GET') {
+        expect(options.path, '/community/posts/mine');
+        expect(options.queryParameters['size'], 50);
+        return jsonBody(<String, Object>{
+          'items': <Object>[
+            <String, Object>{..._postJson(), 'status': 'PENDING'},
+          ],
+          'page': 1,
+          'size': 50,
+          'total': 1,
+          'hasMore': false,
+        });
+      }
+      expect(options.method, 'DELETE');
+      expect(options.path, '/community/posts/p1');
+      return ResponseBody.fromString('', 204, headers: jsonHeaders);
+    });
+    final repository = CommunityRepository(client: ApiClient(dioWith(adapter)));
+
+    final CommunityPage mine = await repository.fetchMine();
+    await repository.deletePost('p1');
+
+    expect(mine.items.single.status, 'PENDING');
+    expect(adapter.requests, hasLength(2));
+  });
 }
 
 Map<String, Object> _postJson() => <String, Object>{

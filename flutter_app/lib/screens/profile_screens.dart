@@ -16,6 +16,7 @@ import 'account_screen.dart';
 import 'account_security_screens.dart';
 import 'additional_screens.dart';
 import 'messages_screen.dart';
+import 'my_community_posts_screen.dart';
 import 'server_endpoint_screen.dart';
 
 /// 退出登录：一次确认，然后清掉本地会话。
@@ -95,6 +96,13 @@ class ProfileScreen extends ConsumerWidget {
                   title: '我的行程',
                   detail: '查看、重命名或删除已保存的行程',
                   onTap: () => _push(context, const TripHomeScreen()),
+                ),
+                const Divider(height: 1),
+                _MenuRow(
+                  icon: Icons.auto_stories_outlined,
+                  title: '我的旅记',
+                  detail: '查看审核中、已通过和已驳回的旅记',
+                  onTap: () => _push(context, const MyCommunityPostsScreen()),
                 ),
                 const Divider(height: 1),
                 _MenuRow(
