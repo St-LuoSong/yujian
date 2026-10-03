@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/network/api_failure.dart';
 import '../../models/community_models.dart';
 
 /// Public community feed plus the interactions that require a signed-in user.
@@ -92,12 +94,22 @@ class CommunityRepository {
   }
 
   Future<String> uploadImage(File file) async {
-    final data = await _client.postMultipartJson(
-      '/community/media/images',
-      data: FormData.fromMap(<String, Object>{
-        'file': await MultipartFile.fromFile(file.path),
-      }),
-    );
-    return (data['relativeUrl'] ?? data['url'] ?? '').toString();
+    try {
+      final data = await _client
+          .postMultipartJson(
+            '/community/media/images',
+            data: FormData.fromMap(<String, Object>{
+              'file': await MultipartFile.fromFile(file.path),
+            }),
+          )
+          // 单张图片必须有明确上限：网络半开时不能让发布页一直转圈。
+          .timeout(const Duration(seconds: 45));
+      return (data['relativeUrl'] ?? data['url'] ?? '').toString();
+    } on TimeoutException {
+      throw const ApiFailure(
+        kind: ApiFailureKind.timeout,
+        message: '图片上传超时，请检查网络后重试。',
+      );
+    }
   }
 }

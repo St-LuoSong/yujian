@@ -436,47 +436,59 @@ class _CommunityCard extends StatelessWidget {
               ),
             ),
             const Divider(height: 1, color: AppColors.hairline),
-            Stack(
-              children: <Widget>[
-                PhotoPlate(
-                  url: post.imageUrls.isEmpty ? '' : post.imageUrls.first,
-                  height: 196,
-                  fallbackLabel: post.city,
-                  semanticLabel: post.title,
-                ),
-                if (post.imageUrls.length > 1)
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: _PhotoCount(count: post.imageUrls.length),
-                  ),
-              ],
-            ),
+            // 左图右文：封面与标题在同一视觉行里，读者一眼就能对上。
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    post.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: AppTypography.sectionTitle,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                      height: 1.3,
-                    ),
+                  Stack(
+                    children: <Widget>[
+                      PhotoPlate(
+                        url: post.imageUrls.isEmpty ? '' : post.imageUrls.first,
+                        width: 112,
+                        height: 112,
+                        radius: AppSpacing.radiusControl,
+                        fallbackLabel: post.city,
+                        semanticLabel: post.title,
+                      ),
+                      if (post.imageUrls.length > 1)
+                        Positioned(
+                          right: 6,
+                          bottom: 6,
+                          child: _PhotoCount(count: post.imageUrls.length),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 7),
-                  Text(
-                    post.content,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: AppTypography.body,
-                      color: AppColors.inkSoft,
-                      height: 1.55,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          post.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: AppTypography.sectionTitle,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          post.content,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: AppTypography.caption,
+                            color: AppColors.inkSoft,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

@@ -82,7 +82,7 @@ class _OptionSheet extends StatelessWidget {
                 ],
                 const SizedBox(height: 14),
                 for (final String option in options) ...<Widget>[
-                  _OptionTile(
+                  OptionTile(
                     label: option,
                     detail: details[option],
                     selected: option == selected,
@@ -97,8 +97,11 @@ class _OptionSheet extends StatelessWidget {
       );
 }
 
-class _OptionTile extends StatelessWidget {
-  const _OptionTile({
+/// 弹层里的一个选项。公开出来是为了让别的单选场景（例如选择关联行程）
+/// 复用同一套「收起态 / 展开态 / 选中态」视觉，而不是再挂一个 Material 下拉框。
+class OptionTile extends StatelessWidget {
+  const OptionTile({
+    super.key,
     required this.label,
     required this.detail,
     required this.selected,

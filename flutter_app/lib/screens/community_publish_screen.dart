@@ -10,9 +10,11 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/app_typography.dart';
 import '../core/widgets/app_back_button.dart';
+import '../core/widgets/form_controls.dart';
+import '../core/widgets/option_sheet.dart';
 import '../core/widgets/photo_plate.dart';
+import '../core/widgets/press_scale.dart';
 import '../core/widgets/surface_card.dart';
-import '../core/widgets/tag_pill.dart';
 import '../models/trip_models.dart';
 import '../data/repositories/community_repository.dart';
 import '../data/repositories/travel_repository.dart';
@@ -42,7 +44,9 @@ class _CommunityPublishScreenState
   List<TripSummary> _trips = <TripSummary>[];
   TripSummary? _selectedTrip;
   final List<String> _imageUrls = <String>[];
-  int _uploading = 0;
+  /// 上传中是一个明确的是/否状态；进度单独计数，避免"永不归零"的布尔漂移。
+  bool _uploading = false;
+  int _uploadProcessed = 0;
   int _uploadTotal = 0;
   bool _loadingTrips = true;
   bool _submitting = false;
@@ -91,39 +95,65 @@ class _CommunityPublishScreenState
   }
 
   Future<void> _pickImages() async {
-    if (_uploading > 0 || _imageUrls.length >= _maxImages) return;
+    if (_uploading || _imageUrls.length >= _maxImages) return;
+
+    final List<XFile> picked;
     try {
-      final List<XFile> picked = await _picker.pickMultiImage(imageQuality: 85);
-      if (picked.isEmpty) return;
-      final int remaining = _maxImages - _imageUrls.length;
-      final List<XFile> selected = picked.take(remaining).toList();
-      if (mounted) {
-        setState(() {
-          _uploadTotal = selected.length;
-          _uploading = 0;
-          _error = null;
-        });
-      }
+      picked = await _picker.pickMultiImage(imageQuality: 85);
+    } on Object {
+      if (mounted) setState(() => _error = '无法打开相册，请检查系统权限。');
+      return;
+    }
+    if (picked.isEmpty || !mounted) return;
+
+    final int remaining = _maxImages - _imageUrls.length;
+    final List<XFile> selected = picked.take(remaining).toList();
+    setState(() {
+      _error = null;
+      _uploading = true;
+      _uploadProcessed = 0;
+      _uploadTotal = selected.length;
+    });
+
+    final List<String> failed = <String>[];
+    try {
       for (final XFile image in selected) {
         try {
           final String url =
               await _communityRepository.uploadImage(File(image.path));
-          if (url.isEmpty) continue;
+          if (url.isEmpty) {
+            failed.add(_shortName(image.name));
+            continue;
+          }
           if (mounted) {
-            setState(() {
-              _imageUrls.add(url);
-              _uploading++;
-            });
+            setState(() => _imageUrls.add(url));
           }
         } on ApiFailure catch (failure) {
-          if (mounted) setState(() => _error = failure.message);
+          failed.add('${_shortName(image.name)}：${failure.message}');
+        } on Object {
+          failed.add('${_shortName(image.name)}：上传失败');
+        } finally {
+          // 成功和失败都要推进进度，否则进度条会停在中途。
+          if (mounted) setState(() => _uploadProcessed++);
         }
       }
-      if (mounted) setState(() => _uploading = _uploadTotal);
-    } on Object {
-      if (mounted) setState(() => _error = '图片选择失败，请检查系统权限。');
+    } finally {
+      // "上传中"的唯一出口：任何异常都不会把页面锁在加载态。
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+          if (failed.isNotEmpty) {
+            _error = failed.length == 1
+                ? '${failed.first}。其他图片已经保存，可以重试这一张。'
+                : '有 ${failed.length} 张图片没有上传成功：${failed.first}';
+          }
+        });
+      }
     }
   }
+
+  static String _shortName(String value) =>
+      value.length <= 16 ? value : '${value.substring(0, 16)}…';
 
   void _removeImage(String url) {
     setState(() => _imageUrls.remove(url));
@@ -285,6 +315,7 @@ class _CommunityPublishScreenState
           _ImageEditor(
             urls: _imageUrls,
             uploading: _uploading,
+            uploadProcessed: _uploadProcessed,
             uploadTotal: _uploadTotal,
             onAdd: _pickImages,
             onRemove: _removeImage,
@@ -338,12 +369,12 @@ class _CommunityPublishScreenState
           ],
           const SizedBox(height: 20),
           FilledButton.icon(
-            onPressed: _submitting || _uploading > 0 ? null : _submit,
+            onPressed: _submitting || _uploading ? null : _submit,
             icon: const Icon(Icons.send_outlined, size: 18),
             label: Text(
               _submitting
                   ? '提交中…'
-                  : _uploading > 0
+                  : _uploading
                       ? '图片上传中…'
                       : '提交审核',
             ),
@@ -405,41 +436,141 @@ class _TripSelector extends StatelessWidget {
         children: <Widget>[
           const _FieldLabel('关联行程'),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: selected?.id,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              hintText: '选择一份本人行程',
-            ),
-            items: trips
-                .map(
-                  (TripSummary trip) => DropdownMenuItem<String>(
-                    value: trip.id,
-                    child: Text(
-                      '${trip.title}  ·  ${trip.daysCount}天',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                )
-                .toList(),
-            onChanged: (String? id) {
-              if (id == null) return;
-              onChanged(trips.firstWhere((trip) => trip.id == id));
-            },
+          _TripField(trip: selected, onTap: () => _pick(context)),
+        ],
+      ),
+    );
+  }
+
+  /// 用主题化弹层选行程，而不是 Material 下拉框。
+  ///
+  /// 下拉框展开后是一块没有主题的白色矩形列表，和收起态像两个产品；
+  /// 这里复用交通方式那套 `OptionTile`，收起态、展开态、选中态是同一套语言。
+  Future<void> _pick(BuildContext context) async {
+    final TripSummary? picked = await showModalBottomSheet<TripSummary>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext sheetContext) => SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
           ),
-          if (selected != null) ...<Widget>[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                TagPill(selected!.corridor, dense: true),
-                TagPill('${selected!.daysCount} 天', dense: true),
-                TagPill(selected!.intensity, dense: true),
+                const SheetHandle(),
+                const SizedBox(height: 16),
+                const Text(
+                  '选择关联行程',
+                  style: TextStyle(
+                    fontSize: AppTypography.sectionTitle,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '旅记会带上这份行程的路线与天数，读者更容易判断方案可不可行。',
+                  style: TextStyle(
+                    fontSize: AppTypography.caption,
+                    color: AppColors.crackle,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                for (int index = 0; index < trips.length; index++) ...<Widget>[
+                  OptionTile(
+                    label: trips[index].title,
+                    detail: '${trips[index].corridor} · '
+                        '${trips[index].daysCount} 天 · ${trips[index].intensity}',
+                    selected: trips[index].id == selected?.id,
+                    onTap: () => Navigator.of(sheetContext).pop(trips[index]),
+                  ),
+                  if (index != trips.length - 1) const SizedBox(height: 8),
+                ],
               ],
             ),
-          ],
-        ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null) onChanged(picked);
+  }
+}
+
+/// 关联行程的收起态：和展开后的选项用同一套圆角、描边与颜色。
+class _TripField extends StatelessWidget {
+  const _TripField({required this.trip, required this.onTap});
+
+  final TripSummary? trip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final BorderRadius radius = BorderRadius.circular(AppSpacing.radiusControl);
+    final TripSummary? current = trip;
+    return Semantics(
+      button: true,
+      label: current == null ? '选择关联行程' : '关联行程：${current.title}',
+      child: Material(
+        color: AppColors.surfaceTint,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: AppColors.celadonPale),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: <Widget>[
+                  const Icon(Icons.route_outlined,
+                      size: 20, color: AppColors.celadonDeep),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          current?.title ?? '选择一份本人行程',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: AppTypography.body,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          current == null
+                              ? '旅记需要关联一段真实走过的行程'
+                              : '${current.corridor} · ${current.daysCount} 天 · ${current.intensity}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: AppTypography.caption,
+                            color: AppColors.crackle,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.unfold_more,
+                      size: 18, color: AppColors.celadonDeep),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -449,13 +580,15 @@ class _ImageEditor extends StatelessWidget {
   const _ImageEditor({
     required this.urls,
     required this.uploading,
+    required this.uploadProcessed,
     required this.uploadTotal,
     required this.onAdd,
     required this.onRemove,
   });
 
   final List<String> urls;
-  final int uploading;
+  final bool uploading;
+  final int uploadProcessed;
   final int uploadTotal;
   final VoidCallback onAdd;
   final ValueChanged<String> onRemove;
@@ -468,108 +601,195 @@ class _ImageEditor extends StatelessWidget {
             Row(
               children: <Widget>[
                 const _FieldLabel('旅记图片'),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Text(
-                  '${urls.length}/9',
+                  urls.isEmpty ? '最多 9 张' : '已选 ${urls.length} / 9',
                   style: const TextStyle(
                     fontSize: AppTypography.caption,
                     color: AppColors.crackle,
                     fontFeatures: AppTypography.tabularFigures,
                   ),
                 ),
+                const Spacer(),
+                if (!uploading && urls.length < 9)
+                  Text(
+                    '还可添加 ${9 - urls.length} 张',
+                    style: const TextStyle(
+                      fontSize: AppTypography.caption,
+                      color: AppColors.crackle,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
             SizedBox(
-              height: 92,
+              height: 100,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: <Widget>[
                   for (final String url in urls)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Stack(
-                        children: <Widget>[
-                          PhotoPlate(
-                            url: url,
-                            width: 92,
-                            height: 92,
-                            radius: AppSpacing.radiusSmall,
-                            fallbackLabel: '图片',
-                          ),
-                          Positioned(
-                            right: 3,
-                            top: 3,
-                            child: InkResponse(
-                              onTap: () => onRemove(url),
-                              radius: 15,
-                              child: Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xB316211F),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.close,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                      padding: const EdgeInsets.only(right: 10),
+                      child: _Thumbnail(
+                        url: url,
+                        onRemove: () => onRemove(url),
                       ),
                     ),
                   if (urls.length < 9)
-                    InkWell(
-                      onTap: onAdd,
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusSmall),
-                      child: Container(
-                        width: 92,
-                        height: 92,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceTint,
-                          border: Border.all(color: AppColors.hairline),
-                          borderRadius:
-                              BorderRadius.circular(AppSpacing.radiusSmall),
-                        ),
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Icon(Icons.add_photo_alternate_outlined,
-                                color: AppColors.celadonDeep),
-                            SizedBox(height: 5),
-                            Text(
-                              '添加图片',
-                              style: TextStyle(
-                                fontSize: AppTypography.caption,
-                                color: AppColors.celadonDeep,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _AddTile(
+                      remaining: 9 - urls.length,
+                      onTap: uploading ? null : onAdd,
                     ),
                 ],
               ),
             ),
-            if (uploading > 0) ...<Widget>[
-              const SizedBox(height: 10),
-              LinearProgressIndicator(
-                value: uploadTotal <= 0 ? null : uploading / uploadTotal,
-              ),
-              const SizedBox(height: 5),
-              Text(
-                '正在上传第 $uploading / $uploadTotal 张图片…',
-                style: const TextStyle(
-                  fontSize: AppTypography.caption,
-                  color: AppColors.crackle,
-                ),
-              ),
-            ],
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: uploading
+                  ? Padding(
+                      key: const ValueKey<String>('uploading'),
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusPill),
+                            child: LinearProgressIndicator(
+                              minHeight: 6,
+                              value: uploadTotal <= 0
+                                  ? null
+                                  : uploadProcessed / uploadTotal,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '正在上传 $uploadProcessed / $uploadTotal 张图片，请稍候…',
+                            style: const TextStyle(
+                              fontSize: AppTypography.caption,
+                              color: AppColors.crackle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(key: ValueKey<String>('idle')),
+            ),
           ],
         ),
       );
+}
+
+/// 已选图片的缩略图。移除按钮常驻但不抢眼：它是可点操作，不是装饰。
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.url, required this.onRemove});
+
+  final String url;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+        children: <Widget>[
+          PhotoPlate(
+            url: url,
+            width: 100,
+            height: 100,
+            radius: AppSpacing.radiusControl,
+            fallbackLabel: '旅记图片',
+          ),
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Tooltip(
+              message: '移除这张图片',
+              child: InkResponse(
+                onTap: onRemove,
+                radius: 16,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.ink,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.surface, width: 2),
+                  ),
+                  child: const Icon(Icons.close, size: 12, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+/// 添加图片的入口。上传中置灰并说明原因，不做点不动的假按钮。
+class _AddTile extends StatelessWidget {
+  const _AddTile({required this.remaining, required this.onTap});
+
+  final int remaining;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final BorderRadius radius = BorderRadius.circular(AppSpacing.radiusControl);
+    return Tooltip(
+      message: onTap == null ? '正在上传，请稍候' : '从相册添加图片',
+      child: PressScale(
+        child: SizedBox(
+          width: 100,
+          height: 100,
+          child: Material(
+            color: AppColors.surfaceTint,
+            borderRadius: radius,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: onTap == null
+                        ? AppColors.hairline
+                        : AppColors.celadonPale,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Icon(
+                      Icons.add_a_photo_outlined,
+                      size: 22,
+                      color: onTap == null
+                          ? AppColors.crackle
+                          : AppColors.celadonDeep,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '添加图片',
+                      style: TextStyle(
+                        fontSize: AppTypography.caption,
+                        fontWeight: FontWeight.w600,
+                        color: onTap == null
+                            ? AppColors.crackle
+                            : AppColors.celadonDeep,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '还可 $remaining 张',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.crackle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _FieldLabel extends StatelessWidget {
