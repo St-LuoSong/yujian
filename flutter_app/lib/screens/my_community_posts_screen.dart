@@ -74,6 +74,16 @@ class _MyCommunityPostsScreenState
     if (created == true && mounted) await _load();
   }
 
+  /// 作者修改自己的旅记；提交后服务端会把它打回 PENDING 重新审核。
+  Future<void> _edit(CommunityPost post) async {
+    final bool? saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => CommunityPublishScreen(editing: post),
+      ),
+    );
+    if (saved == true && mounted) await _load();
+  }
+
   Future<void> _delete(CommunityPost post) async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -184,6 +194,7 @@ class _MyCommunityPostsScreenState
                         ),
                       ),
                     ),
+                    onEdit: () => _edit(post),
                     onDelete: () => _delete(post),
                   ),
                 ),
@@ -235,11 +246,13 @@ class _MyPostCard extends StatelessWidget {
   const _MyPostCard({
     required this.post,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final CommunityPost post;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
@@ -339,10 +352,21 @@ class _MyPostCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            IconButton(
-              onPressed: onDelete,
-              tooltip: '删除旅记',
-              icon: const Icon(Icons.delete_outline, size: 18),
+            // 编辑与删除竖着放，宽度只占一个图标的宽度，360dp 窄屏也不会挤掉标题。
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                IconButton(
+                  onPressed: onEdit,
+                  tooltip: '编辑旅记',
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                ),
+                IconButton(
+                  onPressed: onDelete,
+                  tooltip: '删除旅记',
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                ),
+              ],
             ),
           ],
         ),

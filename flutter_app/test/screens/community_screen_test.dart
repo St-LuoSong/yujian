@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yujian_travel/app/bootstrap.dart';
 import 'package:yujian_travel/app/providers.dart';
 import 'package:yujian_travel/core/network/api_client.dart';
+import 'package:yujian_travel/core/storage/session_store.dart';
 import 'package:yujian_travel/screens/community_screen.dart';
 
 import '../support/test_http.dart';
@@ -16,6 +18,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          _bootstrap(),
           apiClientProvider.overrideWithValue(ApiClient(dioWith(_feedAdapter()))),
         ],
         child: MaterialApp(
@@ -41,6 +44,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          _bootstrap(),
           apiClientProvider.overrideWithValue(ApiClient(dioWith(adapter))),
         ],
         child: const MaterialApp(home: CommunityScreen()),
@@ -65,6 +69,15 @@ void main() {
     expect(find.text('旅记'), findsWidgets);
   });
 }
+
+/// 社区仓库现在同时依赖接口客户端与运行时配置，测试里把这两样都换成假的。
+/// 会话状态也走这条链路，所以提前把平台启动对象喂进来。
+Override _bootstrap() => appBootstrapProvider.overrideWithValue(
+      AppBootstrap(
+        config: testConfig,
+        sessionStore: SessionStore(storage: MemoryKeyValueStore()),
+      ),
+    );
 
 RecordingAdapter _feedAdapter() => RecordingAdapter((options, _) async {
       if (options.path == '/community/posts') {

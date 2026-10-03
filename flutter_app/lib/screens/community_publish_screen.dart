@@ -15,6 +15,7 @@ import '../core/widgets/option_sheet.dart';
 import '../core/widgets/photo_plate.dart';
 import '../core/widgets/press_scale.dart';
 import '../core/widgets/surface_card.dart';
+import '../models/community_models.dart';
 import '../models/trip_models.dart';
 import '../data/repositories/community_repository.dart';
 import '../data/repositories/travel_repository.dart';
@@ -24,7 +25,10 @@ import '../data/repositories/travel_repository.dart';
 /// The screen deliberately keeps the trip association visible at all times:
 /// the community is a record of a real journey, not a free-form post wall.
 class CommunityPublishScreen extends ConsumerStatefulWidget {
-  const CommunityPublishScreen({super.key});
+  const CommunityPublishScreen({super.key, this.editing});
+
+  /// 传入要修改的旅记就是编辑模式；为空则是新建。
+  final CommunityPost? editing;
 
   @override
   ConsumerState<CommunityPublishScreen> createState() =>
@@ -60,6 +64,19 @@ class _CommunityPublishScreenState
   @override
   void initState() {
     super.initState();
+    final CommunityPost? editing = widget.editing;
+    if (editing != null) {
+      _title.text = editing.title;
+      _content.text = editing.content;
+      _city.text = editing.city;
+      _tags.text = editing.tags.join(',');
+      _visibility = editing.visibility == 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+      // 读回来的是可直接显示的绝对地址，入库前还原成相对路径，
+      // 否则会把某台设备的 IP 写进数据库。
+      _imageUrls.addAll(
+        editing.imageUrls.map(CommunityRepository.storageImageUrl),
+      );
+    }
     _loadTrips();
   }
 
@@ -82,7 +99,18 @@ class _CommunityPublishScreenState
       if (!mounted) return;
       setState(() {
         _trips = result.items.where((trip) => trip.id.isNotEmpty).toList();
-        _selectedTrip = _trips.isEmpty ? null : _trips.first;
+        final String? wanted = widget.editing?.tripPlanId;
+        if (wanted == null) {
+          _selectedTrip = _trips.isEmpty ? null : _trips.first;
+        } else {
+          TripSummary? match;
+          for (final TripSummary trip in _trips) {
+            if (trip.id == wanted) {
+              match = trip;
+            }
+          }
+          _selectedTrip = match;
+        }
         _loadingTrips = false;
       });
     } on ApiFailure catch (failure) {
@@ -161,7 +189,9 @@ class _CommunityPublishScreenState
 
   Future<void> _submit() async {
     setState(() => _error = null);
-    if (_selectedTrip == null) {
+    final CommunityPost? editing = widget.editing;
+    final String? tripId = _selectedTrip?.id ?? editing?.tripPlanId;
+    if (tripId == null) {
       setState(() => _error = '请选择一份本人已保存的行程。');
       return;
     }
@@ -175,22 +205,39 @@ class _CommunityPublishScreenState
     }
     setState(() => _submitting = true);
     try {
-      await _communityRepository.createPost(
-        title: _title.text.trim(),
-        content: _content.text.trim(),
-        city: _city.text.trim(),
-        tags: _tags.text.trim(),
-        visibility: _visibility,
-        tripPlanId: _selectedTrip!.id,
-        imageUrls: _imageUrls,
-      );
+      final List<String> storedImages =
+          _imageUrls.map(CommunityRepository.storageImageUrl).toList();
+      if (editing == null) {
+        await _communityRepository.createPost(
+          title: _title.text.trim(),
+          content: _content.text.trim(),
+          city: _city.text.trim(),
+          tags: _tags.text.trim(),
+          visibility: _visibility,
+          tripPlanId: tripId,
+          imageUrls: storedImages,
+        );
+      } else {
+        await _communityRepository.updatePost(
+          id: editing.id,
+          title: _title.text.trim(),
+          content: _content.text.trim(),
+          city: _city.text.trim(),
+          tags: _tags.text.trim(),
+          visibility: _visibility,
+          tripPlanId: tripId,
+          imageUrls: storedImages,
+        );
+      }
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (BuildContext context) => AlertDialog(
-          title: const Text('已提交审核'),
-          content: const Text(
-            '旅记已进入待审核队列。审核通过后才会出现在公开旅记中；你可以稍后在评论区看到状态。',
+          title: Text(editing == null ? '已提交审核' : '修改已提交审核'),
+          content: Text(
+            editing == null
+                ? '旅记已进入待审核队列。审核通过后才会出现在公开旅记中；你可以在「我的旅记」查看状态。'
+                : '修改已进入待审核队列，审核通过后公开内容会更新；你可以在「我的旅记」查看状态。',
           ),
           actions: <Widget>[
             FilledButton(
@@ -223,7 +270,7 @@ class _CommunityPublishScreenState
       backgroundColor: AppColors.ground,
       appBar: AppBar(
         leading: const AppBackButton(),
-        title: const Text('写旅记'),
+        title: Text(widget.editing == null ? '写旅记' : '编辑旅记'),
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(page, 8, page, 28),
@@ -314,6 +361,7 @@ class _CommunityPublishScreenState
           const SizedBox(height: AppSpacing.content),
           _ImageEditor(
             urls: _imageUrls,
+            displayUrl: _communityRepository.mediaUrl,
             uploading: _uploading,
             uploadProcessed: _uploadProcessed,
             uploadTotal: _uploadTotal,
@@ -579,6 +627,7 @@ class _TripField extends StatelessWidget {
 class _ImageEditor extends StatelessWidget {
   const _ImageEditor({
     required this.urls,
+    required this.displayUrl,
     required this.uploading,
     required this.uploadProcessed,
     required this.uploadTotal,
@@ -587,6 +636,9 @@ class _ImageEditor extends StatelessWidget {
   });
 
   final List<String> urls;
+
+  /// 入库值 -> 本机可显示的绝对地址。移除回调仍然回传入库值。
+  final String Function(String) displayUrl;
   final bool uploading;
   final int uploadProcessed;
   final int uploadTotal;
@@ -631,7 +683,7 @@ class _ImageEditor extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(right: 10),
                       child: _Thumbnail(
-                        url: url,
+                        url: displayUrl(url),
                         onRemove: () => onRemove(url),
                       ),
                     ),

@@ -3,15 +3,39 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_failure.dart';
 import '../../models/community_models.dart';
 
 /// Public community feed plus the interactions that require a signed-in user.
 class CommunityRepository {
-  CommunityRepository({required ApiClient client}) : _client = client;
+  CommunityRepository({required ApiClient client, required AppConfig config})
+      : _client = client,
+        _config = config;
 
   final ApiClient _client;
+  final AppConfig _config;
+
+  /// 服务端存的是 `/media/...` 相对路径，这里补成这台设备能访问的绝对地址。
+  ///
+  /// 数据库里不能写某台设备的 IP：模拟器是 10.0.2.2、真机是局域网地址，
+  /// 一旦写进去，别人的手机就打不开这些图。
+  CommunityPost _resolve(CommunityPost post) => post.copyWith(
+        imageUrls: post.imageUrls.map(_config.resolveMediaUrl).toList(),
+      );
+
+  /// 把绝对地址还原成入库用的相对路径；只对本站 `/media/` 图片生效。
+  static String storageImageUrl(String raw) {
+    final Uri? uri = Uri.tryParse(raw);
+    if (uri != null && uri.hasScheme && uri.path.startsWith('/media/')) {
+      return uri.path;
+    }
+    return raw;
+  }
+
+  /// 给刚上传、还没入库的图片做本页预览。
+  String mediaUrl(String raw) => _config.resolveMediaUrl(raw);
 
   Future<CommunityPage> fetchFeed({
     String? city,
@@ -28,12 +52,12 @@ class CommunityRepository {
         'size': size,
       },
     );
-    return CommunityPage.fromJson(data);
+    return CommunityPage.fromJson(data).mapItems(_resolve);
   }
 
   Future<CommunityPost> fetchDetail(String id) async {
     final data = await _client.getJsonObject('/community/posts/$id');
-    return CommunityPost.fromJson(data);
+    return _resolve(CommunityPost.fromJson(data));
   }
 
   Future<CommunityPost> createPost({
@@ -57,7 +81,32 @@ class CommunityRepository {
         'imageUrls': imageUrls,
       },
     );
-    return CommunityPost.fromJson(data);
+    return _resolve(CommunityPost.fromJson(data));
+  }
+
+  Future<CommunityPost> updatePost({
+    required String id,
+    required String title,
+    required String content,
+    required String city,
+    required String tags,
+    required String visibility,
+    String? tripPlanId,
+    required List<String> imageUrls,
+  }) async {
+    final data = await _client.patchJsonObject(
+      '/community/posts/$id',
+      body: <String, Object?>{
+        'title': title,
+        'content': content,
+        'city': city,
+        'tags': tags,
+        'visibility': visibility,
+        'tripPlanId': tripPlanId,
+        'imageUrls': imageUrls,
+      },
+    );
+    return _resolve(CommunityPost.fromJson(data));
   }
 
   Future<CommunityPage> fetchMine() async {
@@ -65,7 +114,7 @@ class CommunityRepository {
       '/community/posts/mine',
       query: <String, dynamic>{'page': 1, 'size': 50},
     );
-    return CommunityPage.fromJson(data);
+    return CommunityPage.fromJson(data).mapItems(_resolve);
   }
 
   Future<void> deletePost(String id) async {
@@ -76,12 +125,12 @@ class CommunityRepository {
 
   Future<CommunityPost> like(String id) async {
     final data = await _client.postJsonObject('/community/posts/$id/like');
-    return CommunityPost.fromJson(data);
+    return _resolve(CommunityPost.fromJson(data));
   }
 
   Future<CommunityPost> unlike(String id) async {
     final data = await _client.deleteJsonObject('/community/posts/$id/like');
-    return CommunityPost.fromJson(data);
+    return _resolve(CommunityPost.fromJson(data));
   }
 
   Future<void> report(String id, String reason) async {

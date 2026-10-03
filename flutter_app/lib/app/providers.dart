@@ -93,5 +93,8 @@ final accountRepositoryProvider = Provider<AccountRepository>(
 );
 
 final communityRepositoryProvider = Provider<CommunityRepository>(
-  (ref) => CommunityRepository(client: ref.watch(apiClientProvider)),
+  (ref) => CommunityRepository(
+    client: ref.watch(apiClientProvider),
+    config: ref.watch(appConfigProvider),
+  ),
 );

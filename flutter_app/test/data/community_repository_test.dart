@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yujian_travel/core/config/app_config.dart';
 import 'package:yujian_travel/core/network/api_client.dart';
 import 'package:yujian_travel/data/repositories/community_repository.dart';
 import 'package:yujian_travel/models/community_models.dart';
@@ -21,7 +22,7 @@ void main() {
         'hasMore': false,
       });
     });
-    final repository = CommunityRepository(client: ApiClient(dioWith(adapter)));
+    final repository = _repository(adapter);
 
     final CommunityPage page = await repository.fetchFeed(
       city: '洛阳',
@@ -42,7 +43,7 @@ void main() {
       expect(options.method, 'DELETE');
       return jsonBody(<String, Object>{..._postJson(), 'likedByMe': false, 'likeCount': 7});
     });
-    final repository = CommunityRepository(client: ApiClient(dioWith(adapter)));
+    final repository = _repository(adapter);
 
     final CommunityPost liked = await repository.like('p1');
     final CommunityPost unliked = await repository.unlike('p1');
@@ -59,7 +60,7 @@ void main() {
       expect(options.data, <String, Object?>{'reason': '不实信息'});
       return ResponseBody.fromString('', 204, headers: jsonHeaders);
     });
-    final repository = CommunityRepository(client: ApiClient(dioWith(adapter)));
+    final repository = _repository(adapter);
 
     await repository.report('p1', '不实信息');
 
@@ -85,7 +86,7 @@ void main() {
       expect(options.path, '/community/posts/p1');
       return ResponseBody.fromString('', 204, headers: jsonHeaders);
     });
-    final repository = CommunityRepository(client: ApiClient(dioWith(adapter)));
+    final repository = _repository(adapter);
 
     final CommunityPage mine = await repository.fetchMine();
     await repository.deletePost('p1');
@@ -93,7 +94,83 @@ void main() {
     expect(mine.items.single.status, 'PENDING');
     expect(adapter.requests, hasLength(2));
   });
+
+  test('相对图片路径会被补成这台设备能访问的绝对地址', () async {
+    final adapter = RecordingAdapter((options, _) async {
+      return jsonBody(<String, Object>{
+        'items': <Object>[
+          <String, Object>{
+            ..._postJson(),
+            'imageUrls': <String>['/media/luoyang.jpg'],
+          },
+        ],
+        'page': 1,
+        'size': 10,
+        'total': 1,
+        'hasMore': false,
+      });
+    });
+
+    final CommunityPage page = await _repository(adapter).fetchFeed();
+    final String resolved = page.items.single.imageUrls.single;
+
+    // 相对路径 /media/... 必须变成绝对地址，否则卡片只会显示占位图。
+    expect(resolved, startsWith('https://'));
+    expect(resolved, endsWith('/media/luoyang.jpg'));
+    // 入库时要还原成相对路径，不能把本机地址写进数据库。
+    expect(CommunityRepository.storageImageUrl(resolved), '/media/luoyang.jpg');
+    expect(
+      CommunityRepository.storageImageUrl('https://cdn.example.test/a.jpg'),
+      'https://cdn.example.test/a.jpg',
+    );
+  });
+
+  test('作者修改旅记走 PATCH 并回到待审核', () async {
+    final adapter = RecordingAdapter((options, _) async {
+      expect(options.method, 'PATCH');
+      expect(options.path, '/community/posts/p1');
+      expect(options.data, <String, Object?>{
+        'title': '洛阳两日（改）',
+        'content': '改过的正文。',
+        'city': '洛阳',
+        'tags': '历史文化',
+        'visibility': 'PUBLIC',
+        'tripPlanId': 'plan-1',
+        'imageUrls': <String>['/media/a.jpg'],
+      });
+      return jsonBody(<String, Object?>{
+        ..._postJson(),
+        'title': '洛阳两日（改）',
+        'status': 'PENDING',
+        'publishedAt': null,
+      });
+    });
+
+    final CommunityPost updated = await _repository(adapter).updatePost(
+      id: 'p1',
+      title: '洛阳两日（改）',
+      content: '改过的正文。',
+      city: '洛阳',
+      tags: '历史文化',
+      visibility: 'PUBLIC',
+      tripPlanId: 'plan-1',
+      imageUrls: <String>['/media/a.jpg'],
+    );
+
+    expect(updated.status, 'PENDING');
+  });
 }
+
+CommunityRepository _repository(RecordingAdapter adapter) =>
+    CommunityRepository(
+      client: ApiClient(dioWith(adapter)),
+      config: const AppConfig(
+        apiBaseUrl: testBaseUrl,
+        connectTimeout: Duration(seconds: 1),
+        receiveTimeout: Duration(seconds: 1),
+        sendTimeout: Duration(seconds: 1),
+      ),
+    );
 
 Map<String, Object> _postJson() => <String, Object>{
       'id': 'p1',

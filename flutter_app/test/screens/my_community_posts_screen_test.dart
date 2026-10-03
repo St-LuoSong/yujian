@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yujian_travel/app/bootstrap.dart';
 import 'package:yujian_travel/app/providers.dart';
 import 'package:yujian_travel/core/network/api_client.dart';
+import 'package:yujian_travel/core/storage/session_store.dart';
 import 'package:yujian_travel/screens/my_community_posts_screen.dart';
 
 import '../support/test_http.dart';
@@ -28,6 +30,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          appBootstrapProvider.overrideWithValue(
+            AppBootstrap(
+              config: testConfig,
+              sessionStore: SessionStore(storage: MemoryKeyValueStore()),
+            ),
+          ),
           apiClientProvider.overrideWithValue(ApiClient(dioWith(adapter))),
         ],
         child: const MaterialApp(home: MyCommunityPostsScreen()),

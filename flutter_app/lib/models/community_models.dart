@@ -58,6 +58,32 @@ class CommunityPost {
   final String? moderationNote;
 
   bool get isPublic => visibility == 'PUBLIC';
+
+  /// 只用于把图片地址换成这台设备能访问的绝对地址，或更新点赞状态。
+  CommunityPost copyWith({
+    List<String>? imageUrls,
+    int? likeCount,
+    bool? likedByMe,
+  }) =>
+      CommunityPost(
+        id: id,
+        authorName: authorName,
+        authorAvatarKey: authorAvatarKey,
+        tripPlanId: tripPlanId,
+        title: title,
+        content: content,
+        city: city,
+        tags: tags,
+        imageUrls: imageUrls ?? this.imageUrls,
+        likeCount: likeCount ?? this.likeCount,
+        viewCount: viewCount,
+        likedByMe: likedByMe ?? this.likedByMe,
+        status: status,
+        visibility: visibility,
+        createdAt: createdAt,
+        publishedAt: publishedAt,
+        moderationNote: moderationNote,
+      );
 }
 
 class CommunityPage {
@@ -90,6 +116,15 @@ class CommunityPage {
   final int size;
   final int total;
   final bool hasMore;
+
+  CommunityPage mapItems(CommunityPost Function(CommunityPost) transform) =>
+      CommunityPage(
+        items: items.map(transform).toList(),
+        page: page,
+        size: size,
+        total: total,
+        hasMore: hasMore,
+      );
 }
 
 String _text(Object? value) => value?.toString() ?? '';
