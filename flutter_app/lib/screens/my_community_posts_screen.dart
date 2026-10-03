@@ -311,7 +311,8 @@ class _MyPostCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      const Icon(Icons.star, size: 15, color: AppColors.amber),
+                      const Icon(Icons.favorite,
+                          size: 15, color: AppColors.kilnRed),
                       const SizedBox(width: 3),
                       Text(
                         '${post.likeCount}',

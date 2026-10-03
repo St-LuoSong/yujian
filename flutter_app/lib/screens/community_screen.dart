@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/providers.dart';
 import '../app/session_providers.dart';
+import '../core/formatters/chinese_date.dart';
 import '../core/network/api_failure.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
@@ -157,6 +158,33 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
     }
   }
 
+  /// 点赞是真实操作：未登录先登录，失败如实提示，成功后只替换这一条。
+  Future<void> _toggleLike(CommunityPost post) async {
+    if (ref.read(sessionProvider).valueOrNull == null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const AccountScreen()),
+      );
+      if (!mounted || ref.read(sessionProvider).valueOrNull == null) return;
+    }
+    try {
+      final CommunityPost updated = post.likedByMe
+          ? await _repository.unlike(post.id)
+          : await _repository.like(post.id);
+      if (!mounted) return;
+      setState(() {
+        final int index = _items.indexWhere((item) => item.id == updated.id);
+        if (index >= 0) {
+          _items[index] = updated;
+        }
+      });
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(failure.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final double page = AppSpacing.pageFor(MediaQuery.sizeOf(context).width);
@@ -221,6 +249,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
                     child: _CommunityCard(
                       post: _items[index],
                       onTap: () => _openPost(_items[index]),
+                      onToggleLike: () => _toggleLike(_items[index]),
                     ),
                   ),
                   childCount: _items.length,
@@ -354,104 +383,232 @@ class _FilterStrip extends StatelessWidget {
 }
 
 class _CommunityCard extends StatelessWidget {
-  const _CommunityCard({required this.post, required this.onTap});
+  const _CommunityCard({
+    required this.post,
+    required this.onTap,
+    required this.onToggleLike,
+  });
 
   final CommunityPost post;
   final VoidCallback onTap;
+  final VoidCallback onToggleLike;
 
   @override
-  Widget build(BuildContext context) => PressScale(
-        child: SurfaceCard(
-          padding: EdgeInsets.zero,
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Stack(
+  Widget build(BuildContext context) {
+    final DateTime? shareDate = post.publishedAt ?? post.createdAt;
+    final String authorLine = shareDate == null
+        ? post.authorName
+        : '${post.authorName} · ${formatChineseTimestamp(shareDate)}';
+    final bool liked = post.likedByMe;
+    return PressScale(
+      child: SurfaceCard(
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // 作者信息栏：谁、什么时候写的，必须出现在封面之前。
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Row(
                 children: <Widget>[
-                  PhotoPlate(
-                    url: post.imageUrls.isEmpty ? '' : post.imageUrls.first,
-                    height: 188,
-                    scrim: true,
-                    fallbackLabel: post.city,
-                    semanticLabel: post.title,
+                  _MiniAvatar(
+                    name: post.authorName,
+                    avatarKey: post.authorAvatarKey,
+                    size: 34,
                   ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      authorLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: AppTypography.caption,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TagPill(post.city, dense: true),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.hairline),
+            Stack(
+              children: <Widget>[
+                PhotoPlate(
+                  url: post.imageUrls.isEmpty ? '' : post.imageUrls.first,
+                  height: 196,
+                  fallbackLabel: post.city,
+                  semanticLabel: post.title,
+                ),
+                if (post.imageUrls.length > 1)
                   Positioned(
-                    left: 14,
-                    top: 14,
-                    child: TagPill(
-                      post.city,
-                      tone: TagTone.neutral,
-                      dense: true,
+                    right: 10,
+                    bottom: 10,
+                    child: _PhotoCount(count: post.imageUrls.length),
+                  ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    post.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: AppTypography.sectionTitle,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    post.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: AppTypography.body,
+                      color: AppColors.inkSoft,
+                      height: 1.55,
                     ),
                   ),
                 ],
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      post.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: AppTypography.sectionTitle,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      post.content,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: AppTypography.body,
-                        color: AppColors.inkSoft,
-                        height: 1.55,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: <Widget>[
-                        _MiniAvatar(
-                          name: post.authorName,
-                          avatarKey: post.authorAvatarKey,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            post.authorName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: AppTypography.caption,
-                              color: AppColors.crackle,
-                            ),
-                          ),
-                        ),
-                        const Icon(Icons.star, size: 16, color: AppColors.amber),
-                        const SizedBox(width: 3),
-                        Text(
-                          '${post.likeCount}',
-                          style: const TextStyle(
-                            fontSize: AppTypography.caption,
-                            color: AppColors.crackle,
-                            fontFeatures: AppTypography.tabularFigures,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+            ),
+            const Divider(height: 1, color: AppColors.hairline),
+            // 互动栏：点赞与浏览量是真的；评论和收藏尚未实现，如实标注。
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  _MetricItem(
+                    icon: liked ? Icons.favorite : Icons.favorite_border,
+                    label: '${post.likeCount}',
+                    color: liked ? AppColors.kilnRed : AppColors.crackle,
+                    tooltip: liked ? '取消点赞' : '点赞',
+                    onTap: onToggleLike,
+                  ),
+                  _MetricItem(
+                    icon: Icons.visibility_outlined,
+                    label: '${post.viewCount}',
+                    tooltip: '浏览 ${post.viewCount} 次',
+                  ),
+                  const _MetricItem(
+                    icon: Icons.mode_comment_outlined,
+                    label: '评论待开放',
+                    tooltip: '评论功能将在后续版本开放',
+                    muted: true,
+                  ),
+                  const _MetricItem(
+                    icon: Icons.bookmark_border,
+                    label: '收藏待开放',
+                    tooltip: '收藏功能将在后续版本开放',
+                    muted: true,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 多图角标：只说明"里面还有几张"，不占用标题区。
+class _PhotoCount extends StatelessWidget {
+  const _PhotoCount({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xB316211F),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.photo_library_outlined,
+                size: 12, color: Colors.white),
+            const SizedBox(width: 4),
+            Text(
+              '$count 图',
+              style: const TextStyle(
+                fontSize: 11,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
         ),
       );
+}
+
+/// 互动栏里的一项。有 [onTap] 才是可点操作，否则只是如实展示的状态。
+class _MetricItem extends StatelessWidget {
+  const _MetricItem({
+    required this.icon,
+    required this.label,
+    this.tooltip,
+    this.color,
+    this.onTap,
+    this.muted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? tooltip;
+  final Color? color;
+  final VoidCallback? onTap;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color tone = muted ? AppColors.crackle : (color ?? AppColors.crackle);
+    final Widget content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(icon, size: 16, color: tone),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: AppTypography.caption,
+            color: tone,
+            fontWeight: onTap == null ? FontWeight.w400 : FontWeight.w600,
+            fontFeatures: AppTypography.tabularFigures,
+          ),
+        ),
+      ],
+    );
+    final Widget withTooltip =
+        tooltip == null ? content : Tooltip(message: tooltip!, child: content);
+    if (onTap == null) {
+      return withTooltip;
+    }
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: withTooltip,
+      ),
+    );
+  }
 }
 
 class CommunityDetailScreen extends ConsumerStatefulWidget {
@@ -599,10 +756,10 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _likeBusy ? null : _toggleLike,
                       icon: Icon(
-                        _post.likedByMe ? Icons.star : Icons.star_border,
-                        color: _post.likedByMe ? AppColors.amber : null,
+                        _post.likedByMe ? Icons.favorite : Icons.favorite_border,
+                        color: _post.likedByMe ? AppColors.kilnRed : null,
                       ),
-                      label: Text(_post.likedByMe ? '已收藏这份旅记' : '收藏这份旅记'),
+                      label: Text(_post.likedByMe ? '已点赞' : '点赞'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -638,7 +795,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
         _post = updated;
         _likeBusy = false;
       });
-      _message(updated.likedByMe ? '已收藏这份旅记。' : '已取消收藏。');
+      _message(updated.likedByMe ? '已点赞。' : '已取消点赞。');
     } on ApiFailure catch (failure) {
       if (!mounted) return;
       setState(() => _likeBusy = false);
