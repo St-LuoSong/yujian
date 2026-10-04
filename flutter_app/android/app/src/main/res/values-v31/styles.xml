@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ 的系统启动画面。
+
+         平台规定这一屏只能是"纯色底 + 居中图标"，画不了整幅海报。能做的是
+         把底色从默认的白色换成海报底部那片山影青：进程冷启动的第一帧就不再是
+         白底加一个小图标，而是和随后铺满整屏的海报同色。 -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/yujian_splash_bg</item>
+        <!-- 撤掉系统启动页中间那个应用图标：整屏品牌青，随后海报淡入。 -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_blank</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

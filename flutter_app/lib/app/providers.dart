@@ -12,6 +12,7 @@ import '../data/repositories/account_repository.dart';
 import '../data/repositories/community_repository.dart';
 import '../data/repositories/app_update_repository.dart';
 import '../data/repositories/travel_repository.dart';
+import '../models/planner_preset.dart';
 import 'bootstrap.dart';
 
 /// Overridden in `main()` once the platform services are ready.
@@ -85,6 +86,36 @@ final travelRepositoryProvider = Provider<TravelRepository>(
 ///
 /// The planner resets it to null once consumed.
 final pendingPromptProvider = StateProvider<String?>((ref) => null);
+
+/// 首页"从一个场景开始"点选后带过来的预填条件。
+///
+/// 和 pendingPromptProvider 分开：那句话是"用户说了什么"，
+/// 这一份是"能替他先填好的字段"。两者可以只有其一 ——
+/// 手输一句话进来时没有预设，点场景时两个都有。
+final pendingPlannerPresetProvider = StateProvider<PlannerPreset?>((ref) => null);
+
+/// 主导航当前所在的 Tab。
+///
+/// 放在 provider 而不是 HomeScreen 的局部 state：文化锦囊弹窗里的
+/// "用这个主题做一份行程"要能把用户送回行程页，局部 state 做不到。
+final homeTabProvider = StateProvider<int>((ref) => 0);
+
+/// 文化锦囊的文章弹窗是否展开成整屏。
+///
+/// 弹窗的高度由外面那层 FractionallySizedBox 决定，而"展开"按钮在弹窗内部 ——
+/// 两边都要读到同一个值，所以放在 provider 里，而不是各自的局部 state。
+final cultureSheetExpandedProvider = StateProvider<bool>((ref) => false);
+
+/// 全局视觉资源槽：首页横幅（HOME_HERO）、我的页头图（PROFILE_HEADER）、
+/// 文化锦囊头图（CULTURE_HEADER）等。
+///
+/// 一次取、多个页面共用；服务端没配就返回空表，页面各自回落内置样式 ——
+/// 运营没配图不该让任何一个页面变空白。
+final visualResourcesProvider = FutureProvider<Map<String, String>>((ref) async {
+  final HomeResult home =
+      await ref.watch(travelRepositoryProvider).fetchHome();
+  return home.visual;
+});
 
 /// Account bound calls: sign in, the anonymous handover, favourites.
 final accountRepositoryProvider = Provider<AccountRepository>(

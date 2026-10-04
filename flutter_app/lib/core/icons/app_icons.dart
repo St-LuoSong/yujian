@@ -19,6 +19,26 @@ abstract final class AppIcons {
   static const String upload = '${_base}ic_upload.png';
   static const String report = '${_base}ic_report.png';
 
+  // 首页快捷入口：使用团队提供的中原文化图标，不再使用普通 Material 图标。
+  static const String discover = '${_base}ic_discover.png';
+  static const String nearby = '${_base}ic_nearby.png';
+  static const String planning = '${_base}ic_planning.png';
+  static const String culture = '${_base}ic_culture.png';
+
+  // 首页区块标题：同样是团队提供的图标，和上面的快捷入口同一套画风。
+  static const String route = '${_base}ic_route.png';
+  static const String featured = '${_base}ic_featured.png';
+  static const String more = '${_base}ic_more.png';
+
+  // 「从一个场景开始」的四个场景。
+  static const String sceneWeekend = '${_base}ic_scene_weekend.png';
+  static const String sceneAncient = '${_base}ic_scene_ancient.png';
+  static const String sceneNature = '${_base}ic_scene_nature.png';
+  static const String sceneFood = '${_base}ic_scene_food.png';
+
+  /// 首页左上角的品牌标：就是 APK 自己的图标。
+  static const String logo = 'assets/brand/logo_mark.png';
+
   /// 点赞前后两态。
   static String like({required bool selected}) =>
       selected ? likeFilled : likeOutline;

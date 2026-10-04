@@ -74,6 +74,8 @@ interface PoiFormState {
   lat: string
   published: boolean
   sortOrder: number
+  openingHours: string
+  reservationNote: string
 }
 
 /** 中国大陆的经纬度范围，用来挡住明显填反或手滑的数字。 */
@@ -98,6 +100,8 @@ function emptyForm(): PoiFormState {
     lat: '',
     published: true,
     sortOrder: 100,
+    openingHours: '',
+    reservationNote: '',
   }
 }
 
@@ -269,6 +273,8 @@ function openEdit(row: PoiView) {
     lat: coordinateText(row.lat),
     published: row.published,
     sortOrder: row.sortOrder,
+    openingHours: row.openingHours ?? '',
+    reservationNote: row.reservationNote ?? '',
   })
   drawerOpen.value = true
 }
@@ -513,6 +519,17 @@ function shortDate(value: string): string {
               <label>天气提示</label>
               <input v-model="form.weatherTip" class="input" placeholder="雨天仍可游览，建议穿防滑鞋" />
             </div>
+            <div class="field">
+              <label>开放时间</label>
+              <input v-model="form.openingHours" class="input" placeholder="08:00—18:00（以公告为准）" />
+            </div>
+            <div class="field">
+              <label>预约说明</label>
+              <input v-model="form.reservationNote" class="input" placeholder="需提前一天在官方公众号预约" />
+            </div>
+            <p class="hint span-2">
+              开放时间与预约说明留空时，详情页会显示"请以景区公告为准"，不会编造时间。
+            </p>
             <div class="field span-2">
               <label>经纬度坐标（百度 BD09）</label>
               <div class="coord-row">

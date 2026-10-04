@@ -13,14 +13,15 @@ const navItems = [
   { key: 'overview', index: '01', label: '运营总览', to: '/' },
   { key: 'pois', index: '02', label: '景点内容', to: '/pois' },
   { key: 'content', index: '03', label: '内容运营', to: '/content' },
-  { key: 'ai', index: '04', label: 'AI 运行', to: '/ai' },
-  { key: 'prompts', index: '05', label: '提示词版本', to: '/prompts' },
-  { key: 'mock', index: '06', label: 'Mock 数据', to: '/mock' },
-  { key: 'community', index: '07', label: '社区审核', to: '/community' },
-  { key: 'feedback', index: '08', label: '用户反馈', to: '/feedback' },
-  { key: 'releases', index: '09', label: '应用发布', to: '/releases' },
-  { key: 'logs', index: '10', label: '操作日志', to: '/logs' },
-  { key: 'security', index: '11', label: '安全与限流', to: '/security' },
+  { key: 'resources', index: '04', label: '应用资源', to: '/resources' },
+  { key: 'ai', index: '05', label: 'AI 运行', to: '/ai' },
+  { key: 'prompts', index: '06', label: '提示词版本', to: '/prompts' },
+  { key: 'mock', index: '07', label: 'Mock 数据', to: '/mock' },
+  { key: 'community', index: '08', label: '社区审核', to: '/community' },
+  { key: 'feedback', index: '09', label: '用户反馈', to: '/feedback' },
+  { key: 'releases', index: '10', label: '应用发布', to: '/releases' },
+  { key: 'logs', index: '11', label: '操作日志', to: '/logs' },
+  { key: 'security', index: '12', label: '安全与限流', to: '/security' },
 ]
 
 const activeNav = computed(() => (route.meta.nav as string) ?? 'overview')

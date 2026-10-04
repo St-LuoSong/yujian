@@ -15,18 +15,22 @@
 | 测试说明 | [`测试说明.md`](./测试说明.md) | 有 |
 | 需求分析 | [`需求实现对照.md`](./需求实现对照.md) | 有 |
 | 数据安全 / 隐私 / 合规 | 《系统说明书》第 7、8 节 + 《测试说明》第 5 节 | 有 |
+| 人工智能工具使用说明 | [`AI工具使用说明.md`](./AI工具使用说明.md) | 有 |
+| 答辩演示 | [`答辩PPT设计方案.md`](./答辩PPT设计方案.md) | 有（PPT 待按方案制作） |
 
 ## 2. 交付物清单
 
 | 交付物 | 路径 | 说明 |
 | --- | --- | --- |
-| Android APK（调试） | `flutter_app/build/app/outputs/flutter-apk/app-debug.apk` | 开箱可装，默认连 `http://10.0.2.2:8080/api`（模拟器访问本机后端） |
+| Android APK（调试，交付用） | `flutter_app/build/app/outputs/flutter-apk/app-debug.apk` | 开箱可装：后端地址在打包时注入（`--dart-define=API_BASE_URL=…`），APK 内不再提供地址输入框 |
+| Android APK（本机联调） | `flutter build apk --debug` | 不带参数时回落 `http://10.0.2.2:8080/api`，需要本机 Spring 服务在跑 |
 | Android APK（发布） | `flutter build apk --release --dart-define=API_BASE_URL=https://…` | **必须**带 HTTPS 地址；release 不内置明文回退，未配置时启动即提示配置失败 |
 | 后端服务 | `backend/server/`（Spring Boot 3.3.5 / Java 17） | 开发用 H2 文件库，`prod` profile 连 MySQL 8 |
 | 运营管理台 | `backend/admin/`（Vue 3 + Vite） | `npm run dev` 打开，浏览器访问；只做内容与运行管理，不是游客端 |
 | 内容库 | 管理台"景点管理"页维护，图片走 `POST /api/admin/media` 上传 | 存储位置见 `MEDIA_BASE_URL` / `app.media.*` |
 | 验证脚本 | `scripts/verify-*.mjs` | 见《测试说明》第 3 节 |
 | 配图作业单 | [`配图作业单.md`](./配图作业单.md) | 景点配图的人工作业清单、图片规格与版权登记要求 |
+| 答辩 PPT 方案 | [`答辩PPT设计方案.md`](./答辩PPT设计方案.md) | 18 页逐页文案：屏幕文字 + 视觉版式 + 口播要点 + 问答预案 |
 
 ## 3. 演示脚本
 
@@ -72,7 +76,7 @@ scripts\run-server-dev.cmd
 cd backend\admin && npm install && npm run dev
 
 :: 3. APK
-cd flutter_app && flutter build apk --debug
+cd flutter_app && flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:8080/api
 
 :: 4. 自动化验证
 cd backend\server && mvn -o -B test

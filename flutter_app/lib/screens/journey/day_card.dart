@@ -422,7 +422,7 @@ class _DayCardState extends State<DayCard> {
                     style: const TextStyle(
                       fontSize: AppTypography.cardTitle,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.amber,
+                      color: AppColors.amberInk,
                       fontFeatures: AppTypography.tabularFigures,
                     ),
                   ),

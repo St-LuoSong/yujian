@@ -43,6 +43,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/auth/**", "/api/home", "/api/pois/**",
+                    // 主题路线与文化锦囊是公开的只读内容，未登录也该能浏览。
+                    "/api/theme-routes", "/api/culture-articles/**",
                     "/api/anonymous/session", "/actuator/health",
                     // Version checks and verified APK downloads must work before sign-in.
                     "/api/app-releases/**",

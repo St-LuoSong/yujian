@@ -6,6 +6,7 @@ import '../app/providers.dart';
 import '../app/session_providers.dart';
 import '../core/config/app_config.dart';
 import '../core/data_status.dart';
+import '../core/icons/app_icons.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/app_typography.dart';
@@ -18,12 +19,15 @@ import '../core/widgets/tag_pill.dart';
 import '../data/mock_catalog.dart';
 import '../data/repositories/travel_repository.dart';
 import '../models/account_models.dart';
+import '../models/planner_preset.dart';
 import '../models/travel_models.dart';
 import 'additional_screens.dart';
 import 'community_screen.dart';
+import 'culture_screen.dart';
 import 'messages_screen.dart';
 import 'nearby_screen.dart';
 import 'planner_screen.dart';
+import 'popular_screen.dart';
 import 'profile_screens.dart';
 
 /// App shell.
@@ -81,7 +85,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _journeyEpoch = 0;
 
   final TextEditingController promptInput = TextEditingController();
-  int tab = _discoverTab;
+  /// 当前 Tab 由 provider 持有：文化锦囊弹窗也要能把用户送回行程页。
+  int get tab => ref.watch(homeTabProvider);
   late final TravelRepository repository;
 
   @override
@@ -109,7 +114,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 repository: repository,
                 controller: promptInput,
                 onPlan: _startPlanning,
-                onScene: _startScene,
+                onScene: _startPrompt,
+                onScenePreset: _startScene,
                 onOpenProfile: () => _selectTab(_profileTab),
               ),
               CommunityScreen(active: tab == _communityTab),
@@ -141,15 +147,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _handOff(promptInput.text.trim());
   }
 
-  /// A scene chip already carries a full sentence, so it goes straight through.
-  void _startScene(String prompt) {
+  /// 主题路线卡只带一句话：写进备注，直接过去。
+  void _startPrompt(String prompt) {
     promptInput.text = prompt;
     _handOff(prompt);
   }
 
+  /// 场景标签除了那句话，还把能确定的字段一起带过去 ——
+  /// 表单打开就是"填好了、能直接改"的状态，而不是还要从头填一遍。
+  void _startScene(PlannerPreset preset) {
+    promptInput.text = preset.prompt;
+    ref.read(pendingPlannerPresetProvider.notifier).state = preset;
+    _handOff(preset.prompt);
+  }
+
   void _handOff(String prompt) {
     ref.read(pendingPromptProvider.notifier).state = prompt;
-    setState(() => tab = _journeyTab);
+    ref.read(homeTabProvider.notifier).state = _journeyTab;
   }
 
   /// Switching back to 发现 restarts the feed from page 1.
@@ -158,14 +172,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// every tab built, so bumping the key while the tab is hidden would fire a
   /// page-1 request nobody is looking at.
   void _selectTab(int value) {
+    // 先读旧值再改 provider：epoch 的判定要用"切换前"停在哪个 Tab。
+    final int previous = ref.read(homeTabProvider);
+    ref.read(homeTabProvider.notifier).state = value;
     setState(() {
-      if (value == _discoverTab && tab != _discoverTab) {
+      if (value == _discoverTab && previous != _discoverTab) {
         _discoverEpoch++;
       }
-      if (value == _journeyTab && tab != _journeyTab) {
+      if (value == _journeyTab && previous != _journeyTab) {
         _journeyEpoch++;
       }
-      tab = value;
     });
   }
 
@@ -186,6 +202,7 @@ class _Discover extends StatefulWidget {
     required this.controller,
     required this.onPlan,
     required this.onScene,
+    required this.onScenePreset,
     required this.onOpenProfile,
   });
 
@@ -201,6 +218,9 @@ class _Discover extends StatefulWidget {
   final VoidCallback onPlan;
   final ValueChanged<String> onScene;
 
+  /// 点场景标签时，连同预填条件一起交出去。
+  final ValueChanged<PlannerPreset> onScenePreset;
+
   /// 点右上角头像时切到"我的"。
   final VoidCallback onOpenProfile;
 
@@ -209,29 +229,68 @@ class _Discover extends StatefulWidget {
 }
 
 class _DiscoverState extends State<_Discover> {
-  /// One tap scenes. Each is a full sentence so the extraction step has real
-  /// content, and so the traveller sees what a good input looks like.
-  static const List<({String label, IconData icon, String prompt})> _scenes =
-      <({String label, IconData icon, String prompt})>[
+  /// 首页四个场景。
+  ///
+  /// 每个场景带两样东西：一句完整的自然语言需求（让后端拿到真实意图），
+  /// 以及一份能确定的字段（目的地、天数、兴趣、节奏）。只带句子的话，
+  /// 用户点进来还得自己把表单填一遍，这个入口就只做了一半。
+  static const List<({String asset, PlannerPreset preset})> _scenes =
+      <({String asset, PlannerPreset preset})>[
     (
-      label: '周末短途',
-      icon: Icons.weekend_outlined,
-      prompt: '周末想从郑州出发找个不太累的地方，两天一夜，最好有山水和美食。',
+      asset: AppIcons.sceneWeekend,
+      preset: PlannerPreset(
+        label: '周末短途',
+        prompt: '周末想从郑州出发找个不太累的地方，两天一夜，最好有山水和美食。',
+        origin: '郑州',
+        destination: '开封',
+        days: 2,
+        adults: 2,
+        interests: <String>['历史人文', '地道美食'],
+        pace: '轻松',
+        transport: '高铁 + 打车',
+      ),
     ),
     (
-      label: '古都寻迹',
-      icon: Icons.account_balance_outlined,
-      prompt: '两个人在郑州，想去洛阳看历史文化，两天，节奏适中。',
+      asset: AppIcons.sceneAncient,
+      preset: PlannerPreset(
+        label: '古都寻迹',
+        prompt: '两个人在郑州，想去洛阳看历史文化，两天，节奏适中。',
+        origin: '郑州',
+        destination: '洛阳',
+        days: 2,
+        adults: 2,
+        interests: <String>['历史人文'],
+        pace: '适中',
+        transport: '高铁 + 打车',
+      ),
     ),
     (
-      label: '山水秘境',
-      icon: Icons.landscape_outlined,
-      prompt: '从郑州去云台山，两天行程，喜欢自然风光，能接受爬山。',
+      asset: AppIcons.sceneNature,
+      preset: PlannerPreset(
+        label: '山水秘境',
+        prompt: '从郑州去云台山，两天行程，喜欢自然风光，能接受爬山。',
+        origin: '郑州',
+        destination: '焦作',
+        days: 2,
+        adults: 2,
+        interests: <String>['自然风光'],
+        pace: '适中',
+        transport: '混合出行',
+      ),
     ),
     (
-      label: '河南美食',
-      icon: Icons.ramen_dining_outlined,
-      prompt: '在开封玩一天，主要想吃当地特色小吃，顺便看看古都景点。',
+      asset: AppIcons.sceneFood,
+      preset: PlannerPreset(
+        label: '河南美食',
+        prompt: '在开封玩一天，主要想吃当地特色小吃，顺便看看古都景点。',
+        origin: '郑州',
+        destination: '开封',
+        days: 1,
+        adults: 2,
+        interests: <String>['地道美食'],
+        pace: '轻松',
+        transport: '高铁 + 打车',
+      ),
     ),
   ];
 
@@ -248,10 +307,23 @@ class _DiscoverState extends State<_Discover> {
   DataStatus? _status;
   DateTime? _updatedAt;
 
+  /// 首页聚合内容（横幅、主题路线、精选景点、文化预览）。
+  ///
+  /// 与景点信息流分开加载：信息流是分页的、会越来越长，而这一块是固定
+  /// 几个板块。失败时保持为 null，页面退回内置素材，不阻塞下面的卡片。
+  HomeResult? _home;
+
   @override
   void initState() {
     super.initState();
     _loadNextPage();
+    _loadHome();
+  }
+
+  Future<void> _loadHome() async {
+    final HomeResult result = await widget.repository.fetchHome();
+    if (!mounted) return;
+    setState(() => _home = result);
   }
 
   Future<void> _loadNextPage() async {
@@ -310,6 +382,22 @@ class _DiscoverState extends State<_Discover> {
     );
   }
 
+  /// 打开「景区推荐」：按游客收藏数排出来的榜单。
+  ///
+  /// 与首页那条"精选推荐"分开：那条是运营挑的，这条是游客自己攒的，
+  /// 依据不同，能讲的话也不同。
+  void _openPopular() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => PopularScreen(
+          repository: widget.repository,
+          onBrowseAll: _openAll,
+        ),
+      ),
+    );
+  }
+
   /// 打开「附近的景点」。
   ///
   /// 这里**不预先检查定位权限**：检查会带来一次多余的平台往返，而且真正的
@@ -324,10 +412,60 @@ class _DiscoverState extends State<_Discover> {
     );
   }
 
+  /// 打开「文化锦囊」。
+  ///
+  /// 不做"有没有内容"的前置探测：文章为空时列表页自己给出空态与重试，
+  /// 但入口本身必须是真的能点 —— 空入口比空列表更让人失望。
+  void _openCulture() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => CultureScreen(repository: widget.repository),
+      ),
+    );
+  }
+
+  void _openCultureArticle(CultureArticleSummary article) {
+    // 和文化锦囊列表里的点法保持一致：底部弹窗，而不是整页跳转。
+    showCultureArticleSheet(
+      context,
+      repository: widget.repository,
+      preview: article,
+    );
+  }
+
+  /// 服务端还没给出主题路线时的兜底。
+  ///
+  /// 把内置的三条走廊改写成同一种结构，卡片只有一套渲染逻辑；否则首页要
+  /// 为"服务端路线"和"内置走廊"各写一份 UI，两边迟早长歪。
+  static final List<ThemeRoute> _fallbackRoutes = <ThemeRoute>[
+    for (final TravelCorridor corridor in corridors)
+      ThemeRoute(
+        id: 'builtin-${corridor.title}',
+        title: corridor.title,
+        subtitle: corridor.subtitle,
+        cities: corridor.title,
+        duration: corridor.duration,
+        budget: corridor.budget,
+        coverUrl: corridor.image,
+        highlights: corridor.tags,
+        planningPrompt: '',
+        imageCredit: '',
+        sourceUrl: '',
+      ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final double viewport = MediaQuery.sizeOf(context).width;
     final double page = AppSpacing.pageFor(viewport);
+    final HomeResult? home = _home;
+    final List<ThemeRoute> routes =
+        home == null || home.routes.isEmpty ? _fallbackRoutes : home.routes;
+    final List<Destination> featured =
+        home?.featured ?? const <Destination>[];
+    final List<CultureArticleSummary> culture =
+        home?.culture ?? const <CultureArticleSummary>[];
 
     return NotificationListener<ScrollNotification>(
       onNotification: _onScroll,
@@ -339,65 +477,143 @@ class _DiscoverState extends State<_Discover> {
               child: _BrandBar(onOpenProfile: widget.onOpenProfile),
             ),
           ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(page, 16, page, 0),
-            sliver: SliverToBoxAdapter(
-              child: _HeroCard(
+          // 首屏横幅通栏铺满，左右不留白、不切圆角：整页只有这一处是"整幅照片"，
+          // 它才立得住。下面所有区块都退回到留白与网格里。
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _HeroBanner(
+                page: page,
                 controller: widget.controller,
                 onPlan: widget.onPlan,
+                headline: home?.headline ?? TravelRepository.defaultHeadline,
+                subline: home?.subline ?? TravelRepository.defaultSubline,
+                imageUrl: home?.visual['HOME_HERO'] ?? '',
               ),
             ),
           ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(page, 20, page, 0),
             sliver: SliverToBoxAdapter(
-              child: _SceneChips(scenes: _scenes, onScene: widget.onScene),
-            ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(page, 16, page, 0),
-            sliver: SliverToBoxAdapter(
-              child: _NearbyEntry(onTap: _openNearby),
-            ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(page, 28, page, 0),
-            sliver: const SliverToBoxAdapter(
-              child: SectionHeader(
-                title: '三条示范走廊',
-                subtitle: '首版把郑州—开封、郑州—洛阳、焦作—云台山做深，而不是铺满全省。',
-                icon: Icons.alt_route,
+              child: _QuickEntries(
+                onNearby: _openNearby,
+                onPopular: _openPopular,
+                onPlan: widget.onPlan,
+                onCulture: _openCulture,
               ),
             ),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(page, 14, page, 0),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (BuildContext context, int index) => Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == corridors.length - 1 ? 0 : 12,
-                  ),
-                  child: _CorridorCard(
-                    corridor: corridors[index],
-                    onTap: () => widget.onScene(
-                      '想把${corridors[index].title}这条线走一遍，'
-                      '${corridors[index].duration}，预算${corridors[index].budget}，'
-                      '帮我安排行程。',
+            padding: EdgeInsets.fromLTRB(page, 22, page, 0),
+            sliver: SliverToBoxAdapter(
+              child:
+                  _SceneChips(scenes: _scenes, onScene: widget.onScenePreset),
+            ),
+          ),
+          // 精选路线：三条走廊，横向一整张一大张地滑。
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(page, 26, page, 0),
+            sliver: SliverToBoxAdapter(
+              child: SectionHeader(
+                title: '精选路线',
+                subtitle: '首版把郑州—开封、郑州—洛阳、焦作—云台山做深，而不是铺满全省。',
+                  imageAsset: AppIcons.route,
+                trailing: _MoreEntry(onTap: _openAll),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 196,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                padding: EdgeInsets.fromLTRB(page - 8, 14, page - 8, 0),
+                itemCount: routes.length,
+                separatorBuilder: (BuildContext context, int index) =>
+                    const SizedBox(width: 12),
+                itemBuilder: (BuildContext context, int index) => SizedBox(
+                  width: viewport * 0.82,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: _RouteCard(
+                      route: routes[index],
+                      onTap: () => widget.onScene(routes[index].prompt),
                     ),
                   ),
                 ),
-                childCount: corridors.length,
               ),
             ),
           ),
+          // 精选推荐：运营挑出来的那 12 个，横滑一列小卡。
+          if (featured.isNotEmpty) ...<Widget>[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(page, 26, page, 0),
+              sliver: SliverToBoxAdapter(
+                child: SectionHeader(
+                  title: '精选推荐',
+                  subtitle: '运营从内容库里挑出来的河南目的地，先看值不值得去。',
+                  imageAsset: AppIcons.featured,
+                  trailing: _MoreEntry(onTap: _openAll),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 232,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  padding: EdgeInsets.fromLTRB(page, 14, page, 0),
+                  itemCount: featured.length,
+                  separatorBuilder: (BuildContext context, int index) =>
+                      const SizedBox(width: 12),
+                  itemBuilder: (BuildContext context, int index) =>
+                      _FeaturedCard(destination: featured[index]),
+                ),
+              ),
+            ),
+          ],
+          if (culture.isNotEmpty) ...<Widget>[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(page, 26, page, 0),
+              sliver: SliverToBoxAdapter(
+                child: SectionHeader(
+                  title: '文化锦囊',
+                  subtitle: '出发前读两分钟，路上多懂一点中原。',
+                  icon: Icons.menu_book_outlined,
+                  trailing: _MoreEntry(onTap: _openCulture, label: '全部文章'),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(page, 14, page, 0),
+              sliver: SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 216,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    itemCount: culture.length,
+                    separatorBuilder: (BuildContext context, int index) =>
+                        const SizedBox(width: 12),
+                    itemBuilder: (BuildContext context, int index) =>
+                        _CulturePreviewCard(
+                          article: culture[index],
+                          onTap: () => _openCultureArticle(culture[index]),
+                        ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           SliverPadding(
             padding: EdgeInsets.fromLTRB(page, 28, page, 0),
             sliver: SliverToBoxAdapter(
               child: SectionHeader(
-                title: '此刻去看看',
-                subtitle: '每张卡片都给出票价、建议时长和适合人群，先判断值不值得去。',
-                icon: Icons.photo_library_outlined,
+                title: '更多景点',
+                subtitle: '每条都给出票价、建议时长和来源状态，先判断值不值得去。',
+                imageAsset: AppIcons.more,
                 trailing: _MoreEntry(onTap: _openAll),
               ),
             ),
@@ -414,18 +630,16 @@ class _DiscoverState extends State<_Discover> {
                 ),
               ),
             ),
+          // 目录部分换成"一行一个"的列表：推荐区是挑出来的，这里是把内容库
+          // 摊开给人翻，两种读法用两种版式，页面才不像同一面卡片墙重复三遍。
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(page, 14, page, 0),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                mainAxisExtent: 252,
-              ),
+            padding: EdgeInsets.fromLTRB(page, 6, page, 0),
+            sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (BuildContext context, int index) =>
-                    _AttractionCard(destination: _items[index]),
+                (BuildContext context, int index) => _AttractionRow(
+                  destination: _items[index],
+                  showDivider: index != _items.length - 1,
+                ),
                 childCount: _items.length,
               ),
             ),
@@ -456,9 +670,12 @@ class _DiscoverState extends State<_Discover> {
 /// 首页只铺一屏卡片，想挨个看的人需要一个明确的去处，而不是在首页一路滑到底
 /// —— 那正是这次要改掉的问题。
 class _MoreEntry extends StatelessWidget {
-  const _MoreEntry({required this.onTap});
+  const _MoreEntry({required this.onTap, this.label = '查看更多'});
 
   final VoidCallback onTap;
+
+  /// 按钮文案。默认"查看更多"；文化锦囊那一条说"全部文章"更准确。
+  final String label;
 
   @override
   Widget build(BuildContext context) => PressScale(
@@ -473,11 +690,14 @@ class _MoreEntry extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
             ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text('查看更多', style: TextStyle(fontSize: AppTypography.caption)),
-              Icon(Icons.chevron_right, size: 16),
+              Text(
+                label,
+                style: const TextStyle(fontSize: AppTypography.caption),
+              ),
+              const Icon(Icons.chevron_right, size: 16),
             ],
           ),
         ),
@@ -675,18 +895,13 @@ class _AllAttractionsScreenState extends State<_AllAttractionsScreen> {
                 ),
               ),
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(page, 14, page, 0),
-                sliver: SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    mainAxisExtent: 252,
-                  ),
+                padding: EdgeInsets.fromLTRB(page, 8, page, 0),
+                sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (BuildContext context, int index) =>
-                        _AttractionCard(destination: _items[index]),
+                    (BuildContext context, int index) => _AttractionRow(
+                      destination: _items[index],
+                      showDivider: index != _items.length - 1,
+                    ),
                     childCount: _items.length,
                   ),
                 ),
@@ -728,23 +943,9 @@ class _BrandBar extends ConsumerWidget {
     final AppConfig config = ref.watch(appConfigProvider);
     return Row(
       children: <Widget>[
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: AppColors.celadonDeep,
-            borderRadius: BorderRadius.circular(11),
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            '豫',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onInk,
-            ),
-          ),
-        ),
+        // 左上角用 APK 自己的图标，而不是一个写着"豫"的色块：
+        // 用户刚在桌面上点过这个图标，进来还认得它。
+        const AppIcon(AppIcons.logo, size: 36),
         const SizedBox(width: 10),
         const Expanded(
           child: Column(
@@ -948,89 +1149,152 @@ class _HeaderAvatar extends StatelessWidget {
       };
 }
 
-/// The first screen: one photograph, one sentence, one action.
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.controller, required this.onPlan});
+/// 首页横幅：一张山河图承担品牌展示，搜索框压在图上。
+///
+/// 与旧版 _HeroCard 的区别：不再是一块"照片 + 大表单"的卡片，而是把
+/// "一句话规划"收成一个浮层输入框，让第一屏先讲河南、再谈功能。
+/// 图片地址来自运营台的 HOME_HERO 槽；没配时退回内置的河南照片。
+class _HeroBanner extends StatelessWidget {
+  const _HeroBanner({
+    required this.page,
+    required this.controller,
+    required this.onPlan,
+    required this.headline,
+    required this.subline,
+    required this.imageUrl,
+  });
+
+  /// 页面左右留白。横幅自己通栏，但压在上面的文字仍与整页对齐。
+  final double page;
+
+  final TextEditingController controller;
+  final VoidCallback onPlan;
+  final String headline;
+  final String subline;
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final String hero =
+        imageUrl.trim().isEmpty ? corridors.first.image : imageUrl.trim();
+    return Stack(
+      children: <Widget>[
+        PhotoPlate(
+          url: hero,
+          height: 300,
+          scrim: true,
+          fallbackLabel: '河南',
+          semanticLabel: '河南山河',
+        ),
+        Positioned(
+          left: page,
+          right: page,
+          top: 26,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const TagPill('河南文旅', tone: TagTone.neutral, dense: true),
+              const SizedBox(height: 12),
+              Text(
+                headline,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subline,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: AppTypography.caption,
+                  color: Color(0xDDEEF3F0),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          left: page,
+          right: page,
+          bottom: 16,
+          child: _PromptField(controller: controller, onPlan: onPlan),
+        ),
+      ],
+    );
+  }
+}
+
+/// 压在横幅上的自然语言输入框。
+///
+/// 输入本身还是走原来那条规划链路（onPlan → 行程页），这里只换皮：
+/// 输入框有实体白底和阴影，保证压在照片上也读得清；右侧是一个圆形发送键，
+/// 拇指能够到，也不必在窄屏上再挤一行按钮。
+class _PromptField extends StatelessWidget {
+  const _PromptField({required this.controller, required this.onPlan});
 
   final TextEditingController controller;
   final VoidCallback onPlan;
 
   @override
-  Widget build(BuildContext context) => SurfaceCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusControl + 2),
+          boxShadow: AppColors.cardShadow,
+        ),
+        child: Row(
           children: <Widget>[
-            Stack(
-              children: <Widget>[
-                PhotoPlate(
-                  url: corridors.first.image,
-                  height: 208,
-                  scrim: true,
-                  semanticLabel: '河南龙门石窟',
-                ),
-                const Positioned(
-                  left: 18,
-                  right: 18,
-                  bottom: 18,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      TagPill(
-                        '河南 · 中原文化',
-                        tone: TagTone.neutral,
-                        dense: true,
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        '一句话，规划你的河南之旅',
-                        style: TextStyle(
-                          fontSize: 23,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.2,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        '从第一站到最后一程，把中原风物安排得刚刚好。',
-                        style: TextStyle(
-                          fontSize: AppTypography.caption,
-                          color: Color(0xDDEEF3F0),
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            const Icon(
+              Icons.auto_awesome_outlined,
+              size: 18,
+              color: AppColors.celadonDeep,
             ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  TextField(
-                    controller: controller,
-                    maxLines: 2,
-                    minLines: 2,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                      hintText: '例如：两个人周末从郑州去洛阳，想看历史文化，不要太累',
-                    ),
-                    onSubmitted: (_) => onPlan(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                minLines: 1,
+                maxLines: 2,
+                textInputAction: TextInputAction.done,
+                style: const TextStyle(
+                  fontSize: AppTypography.body,
+                  color: AppColors.ink,
+                ),
+                decoration: const InputDecoration(
+                  filled: false,
+                  isDense: true,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  hintText: '两人周末从郑州去洛阳，想看历史文化，不要太累',
+                ),
+                onSubmitted: (_) => onPlan(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            PressScale(
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: FilledButton(
+                  onPressed: onPlan,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    padding: EdgeInsets.zero,
+                    shape: const CircleBorder(),
+                    backgroundColor: AppColors.celadonDeep,
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: onPlan,
-                      icon: const Icon(Icons.auto_awesome_motion_outlined,
-                          size: 18),
-                      label: const Text('开始规划'),
-                    ),
-                  ),
-                ],
+                  child: const Icon(Icons.arrow_forward, size: 18),
+                ),
               ),
             ),
           ],
@@ -1038,52 +1302,239 @@ class _HeroCard extends StatelessWidget {
       );
 }
 
+/// 首页四个快捷入口。
+///
+/// 四件事对应四个真实去处：附近景点 / 景点推荐 / 行程规划 / 文化锦囊。
+/// 没有"建设中"，也没有点了不动的入口。
+class _QuickEntries extends StatelessWidget {
+  const _QuickEntries({
+    required this.onNearby,
+    required this.onPopular,
+    required this.onPlan,
+    required this.onCulture,
+  });
+
+  final VoidCallback onNearby;
+  final VoidCallback onPopular;
+  final VoidCallback onPlan;
+  final VoidCallback onCulture;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: <Widget>[
+          Expanded(
+            child: _QuickEntry(
+              asset: AppIcons.nearby,
+              label: '附近景点',
+              semanticLabel: '附近景点',
+              onTap: onNearby,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _QuickEntry(
+              asset: AppIcons.discover,
+              label: '景区推荐',
+              semanticLabel: '景区推荐，按游客收藏排序',
+              onTap: onPopular,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _QuickEntry(
+              asset: AppIcons.planning,
+              label: '行程规划',
+              semanticLabel: '行程规划',
+              onTap: onPlan,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _QuickEntry(
+              asset: AppIcons.culture,
+              label: '文化锦囊',
+              semanticLabel: '文化锦囊',
+              onTap: onCulture,
+            ),
+          ),
+        ],
+      );
+}
+
+/// 一个快捷入口：图标 + 一行字，没有卡片、没有描边、没有底色。
+///
+/// 之前给图标套了一个浅色圆角块，结果是"框大图标小"，四个入口像四张缩小
+/// 的卡片。这里把装饰全部去掉，只留图标本身，并在点击时给一层很轻的水波，
+/// 让"可以点"由反馈说明，而不是由边框说明。
+class _QuickEntry extends StatelessWidget {
+  const _QuickEntry({
+    required this.asset,
+    required this.label,
+    required this.semanticLabel,
+    required this.onTap,
+  });
+
+  final String asset;
+  final String label;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: semanticLabel,
+        child: PressScale(
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // 图标本身就是主体：不上色、不套容器。
+                  // 尺寸按"这一格有多宽"来定 —— 四个并排正好占满一行，
+                  // 所以手机上看到的是四张大图标，而不是大框套小图。
+                  LayoutBuilder(
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                      final double size =
+                          constraints.maxWidth.clamp(48.0, 80.0);
+                      return AppIcon(asset, size: size);
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: AppTypography.caption,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// 一组"从一个场景开始"的入口。
+///
+/// 之前用的是 Material 默认的 ActionChip：灰描边、小图标，四个挤在一行或者
+/// 零散折成两行，看上去像系统组件而不是这个产品的一部分。现在每一格是两列
+/// 网格里的一张白色小卡：图标落在浅青圆底里，按下去有水波和轻微缩放，
+/// 一行两个、四个正好两行，拇指不用瞄准。
 class _SceneChips extends StatelessWidget {
   const _SceneChips({required this.scenes, required this.onScene});
 
-  final List<({String label, IconData icon, String prompt})> scenes;
-  final ValueChanged<String> onScene;
+  final List<({String asset, PlannerPreset preset})> scenes;
+  final ValueChanged<PlannerPreset> onScene;
 
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const Text(
-            '或者，从一个场景开始',
+            '从一个场景开始',
             style: TextStyle(
               fontSize: AppTypography.secondary,
               fontWeight: FontWeight.w700,
-              color: AppColors.inkSoft,
+              color: AppColors.ink,
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              for (final ({String label, IconData icon, String prompt}) scene
-                  in scenes)
-                PressScale(
-                  child: ActionChip(
-                    avatar: Icon(
-                      scene.icon,
-                      size: 16,
-                      color: AppColors.celadonDeep,
-                    ),
-                    label: Text(scene.label),
-                    onPressed: () => onScene(scene.prompt),
-                  ),
-                ),
-            ],
+          // 四个场景排成一行：图标不带边框、不带底色，一行占的高度和一次
+          // 呼吸差不多，把纵向空间留给下面的路线与景点。
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              const double gap = 8;
+              final double cell =
+                  (constraints.maxWidth - gap * (scenes.length - 1)) /
+                      scenes.length;
+              return Row(
+                children: <Widget>[
+                  for (int index = 0; index < scenes.length; index++)
+                    ...<Widget>[
+                      if (index > 0) const SizedBox(width: gap),
+                      SizedBox(
+                        width: cell,
+                        child: _SceneTile(
+                          asset: scenes[index].asset,
+                          label: scenes[index].preset.label,
+                          onTap: () => onScene(scenes[index].preset),
+                        ),
+                      ),
+                    ],
+                ],
+              );
+            },
           ),
         ],
       );
 }
 
-class _CorridorCard extends StatelessWidget {
-  const _CorridorCard({required this.corridor, required this.onTap});
+/// 一个场景格子：图标 + 场景名。
+///
+/// 图标用的是团队自己画的那一套，所以这里不再给它套边框、圆底或卡片 ——
+/// 直接显示图形本身，按下去有水波与轻微缩放就够了。
+class _SceneTile extends StatelessWidget {
+  const _SceneTile({
+    required this.asset,
+    required this.label,
+    required this.onTap,
+  });
 
-  final TravelCorridor corridor;
+  final String asset;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: '$label，一键填好行程条件',
+        child: PressScale(
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  AppIcon(asset, size: 30),
+                  const SizedBox(height: 5),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: AppTypography.caption,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// 精选路线卡：一条走廊的照片 + 标题 + 时长/预算/主题标签。
+///
+/// 数据结构改用服务端的 ThemeRoute，卡片本身不再关心路线来自网络还是内置，
+/// 渲染只有这一处。
+class _RouteCard extends StatelessWidget {
+  const _RouteCard({required this.route, required this.onTap});
+
+  final ThemeRoute route;
   final VoidCallback onTap;
 
   @override
@@ -1094,11 +1545,11 @@ class _CorridorCard extends StatelessWidget {
           child: Stack(
             children: <Widget>[
               PhotoPlate(
-                url: corridor.image,
+                url: route.coverUrl,
                 height: 168,
                 scrim: true,
-                fallbackLabel: corridor.title,
-                semanticLabel: corridor.title,
+                fallbackLabel: route.title,
+                semanticLabel: route.title,
               ),
               Positioned(
                 left: 16,
@@ -1108,7 +1559,7 @@ class _CorridorCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      corridor.title,
+                      route.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1119,7 +1570,7 @@ class _CorridorCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      corridor.subtitle,
+                      route.subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1132,9 +1583,12 @@ class _CorridorCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 6,
                       children: <Widget>[
-                        TagPill(corridor.duration, dense: true),
-                        TagPill(corridor.budget, tone: TagTone.sand, dense: true),
-                        for (final String tag in corridor.tags.take(2))
+                        if (route.duration.isNotEmpty)
+                          TagPill(route.duration, dense: true),
+                        if (route.budget.isNotEmpty)
+                          TagPill(route.budget,
+                              tone: TagTone.sand, dense: true),
+                        for (final String tag in route.highlights.take(2))
                           TagPill(tag, dense: true),
                       ],
                     ),
@@ -1147,102 +1601,278 @@ class _CorridorCard extends StatelessWidget {
       );
 }
 
-/// Attraction card: photograph, name, one line of context, then the three facts
-/// that decide whether it fits the trip.
-class _AttractionCard extends StatelessWidget {
-  const _AttractionCard({required this.destination});
+/// 精选推荐卡（横向滚动）。只有运营台标记 home_featured 的景点才会进来。
+///
+/// 只呈现有来源的事实：城市/主题、票价、建议时长。没有评分与点评数 ——
+/// 内容库里没有这两个字段，编一个出来就是假数据。
+class _FeaturedCard extends StatelessWidget {
+  const _FeaturedCard({required this.destination});
 
   final Destination destination;
 
   @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 168,
+        child: PressScale(
+          child: SurfaceCard(
+            padding: const EdgeInsets.all(8),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => DestinationDetail(destination: destination),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                PhotoPlate(
+                  url: destination.image,
+                  height: 104,
+                  radius: AppSpacing.radiusSmall,
+                  fallbackLabel: destination.name,
+                  semanticLabel: destination.name,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  destination.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: AppTypography.cardTitle,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  destination.theme.isEmpty
+                      ? destination.city
+                      : '${destination.city} · ${destination.theme}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: AppTypography.caption,
+                    color: AppColors.crackle,
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        '¥${destination.ticket} 起',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: AppTypography.caption,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.amberInk,
+                          fontFeatures: AppTypography.tabularFigures,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        destination.duration,
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: AppTypography.caption,
+                          color: AppColors.crackle,
+                          fontFeatures: AppTypography.tabularFigures,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+/// 首页文化锦囊预览卡。
+class _CulturePreviewCard extends StatelessWidget {
+  const _CulturePreviewCard({required this.article, required this.onTap});
+
+  final CultureArticleSummary article;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 208,
+        child: PressScale(
+          child: SurfaceCard(
+            padding: const EdgeInsets.all(8),
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                PhotoPlate(
+                  url: article.coverUrl,
+                  height: 84,
+                  radius: AppSpacing.radiusSmall,
+                  fallbackLabel: article.category,
+                  semanticLabel: article.title,
+                ),
+                const SizedBox(height: 8),
+                if (article.category.isNotEmpty)
+                  TagPill(article.category, dense: true),
+                const SizedBox(height: 6),
+                Text(
+                  article.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: AppTypography.secondary,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Expanded(
+                  child: Text(
+                    article.summary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: AppTypography.caption,
+                      color: AppColors.crackle,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+/// 内容库目录里的一行：缩略图 + 名称、简介、票价与时长 + 来源状态。
+///
+/// 这里刻意不用上面那种大图卡片：推荐区是"替你挑出来的"，用图说话；
+/// 目录是"把内容库摊开让你自己翻"，用行说话。三处内容用三种版式，
+/// 页面才有节奏，也不会再像同一面卡片墙重复三遍。
+class _AttractionRow extends StatelessWidget {
+  const _AttractionRow({required this.destination, required this.showDivider});
+
+  final Destination destination;
+
+  /// 最后一行不画分隔线：列表末尾留一条悬空的线很显眼。
+  final bool showDivider;
+
+  @override
   Widget build(BuildContext context) => PressScale(
-        child: SurfaceCard(
-          padding: const EdgeInsets.all(10),
+        child: InkWell(
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute<void>(
               builder: (_) => DestinationDetail(destination: destination),
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              PhotoPlate(
-                url: destination.image,
-                height: 108,
-                radius: AppSpacing.radiusSmall,
-                fallbackLabel: destination.name,
-                semanticLabel: destination.name,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                destination.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: AppTypography.cardTitle,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                destination.summary,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: AppTypography.caption,
-                  color: AppColors.crackle,
-                  height: 1.45,
-                ),
-              ),
-              const Spacer(),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      '¥${destination.ticket} 起',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: AppTypography.caption,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.amber,
-                        fontFeatures: AppTypography.tabularFigures,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    PhotoPlate(
+                      url: destination.image,
+                      height: 84,
+                      width: 84,
+                      radius: AppSpacing.radiusSmall,
+                      fallbackLabel: destination.name,
+                      semanticLabel: destination.name,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            destination.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: AppTypography.cardTitle,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            destination.summary,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: AppTypography.caption,
+                              color: AppColors.crackle,
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: <Widget>[
+                              Text(
+                                '¥${destination.ticket} 起',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: AppTypography.caption,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.amberInk,
+                                  fontFeatures: AppTypography.tabularFigures,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  destination.duration,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: AppTypography.caption,
+                                    color: AppColors.crackle,
+                                    fontFeatures: AppTypography.tabularFigures,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: <Widget>[
+                              TagPill(destination.city, dense: true),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: DataStatusBadge(
+                                  status: destination.dataStatus,
+                                  dense: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      destination.duration,
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: AppTypography.caption,
-                        color: AppColors.crackle,
-                        fontFeatures: AppTypography.tabularFigures,
-                      ),
-                    ),
+                  ],
+                ),
+                if (showDivider) ...<Widget>[
+                  const SizedBox(height: 12),
+                  const Divider(
+                    height: 1,
+                    thickness: 0.6,
+                    color: AppColors.hairline,
                   ),
                 ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: <Widget>[
-                  TagPill(destination.city, dense: true),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: DataStatusBadge(
-                      status: destination.dataStatus,
-                      dense: true,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -1333,70 +1963,3 @@ class _DecisionStrip extends StatelessWidget {
       );
 }
 
-/// 发现页上的「在我附近」入口。
-///
-/// 不做成一个只有图标的按钮：它要把三件事一次说清 ——
-/// 能得到什么（按距离排的附近景点）、代价是什么（一次定位授权）、
-/// 以及不授权会怎样（退回按城市浏览）。
-/// 最后一句尤其重要：把代价先说清楚，比事后弹一个"请开启权限"体面得多。
-class _NearbyEntry extends StatelessWidget {
-  const _NearbyEntry({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => SurfaceCard(
-        onTap: onTap,
-        color: AppColors.surfaceTint,
-        border: AppColors.celadonPale,
-        shadow: const <BoxShadow>[],
-        child: Row(
-          children: <Widget>[
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.celadonPale,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusControl),
-              ),
-              child: const Icon(
-                Icons.near_me_outlined,
-                size: 22,
-                color: AppColors.celadonDeep,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    '在我附近',
-                    style: TextStyle(
-                      fontSize: AppTypography.cardTitle,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    '按直线距离看三公里内的河南景点。需要一次定位授权；不授权也能按城市浏览。',
-                    style: TextStyle(
-                      fontSize: AppTypography.caption,
-                      height: AppTypography.lineHeight,
-                      color: AppColors.inkSoft,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.arrow_forward,
-              size: 16,
-              color: AppColors.celadonDeep,
-            ),
-          ],
-        ),
-      );
-}

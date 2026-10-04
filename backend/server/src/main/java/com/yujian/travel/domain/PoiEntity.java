@@ -59,6 +59,28 @@ public class PoiEntity {
     @Column(name = "weather_tip", length = 300)
     private String weatherTip;
 
+    /**
+     * 开放时间。
+     *
+     * 允许为空**并且不会被编造**：为空时客户端显示"请以景区公告为准"。
+     * 景区临时闭园、季节性调整是常态，这里存的是"最近一次核对到的公告口径"，
+     * 不是实时状态。
+     */
+    @Column(name = "opening_hours", length = 200)
+    private String openingHours;
+
+    /** 预约说明（是否需要预约、从哪个渠道）。同样允许为空，空即不提示。 */
+    @Column(name = "reservation_note", length = 300)
+    private String reservationNote;
+
+    /** 是否进入首页"热门推荐"。 */
+    @Column(name = "home_featured", nullable = false)
+    private boolean homeFeatured;
+
+    /** 首页推荐位排序，仅在 homeFeatured 为真时有意义。 */
+    @Column(name = "featured_sort_order", nullable = false)
+    private int featuredSortOrder;
+
     /** 数据状态：实时数据 / 缓存数据 / 系统资料 / 演示数据。 */
     @Column(name = "data_status", nullable = false, length = 32)
     private String dataStatus;

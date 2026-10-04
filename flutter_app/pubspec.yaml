@@ -1,7 +1,7 @@
 name: yujian_travel
 description: 豫见智旅 Android 客户端
 publish_to: none
-version: 0.6.0+6
+version: 0.7.3+10
 environment:
   sdk: ">=3.3.0 <4.0.0"
 dependencies:
@@ -27,3 +27,5 @@ flutter:
     - assets/images/
     # 全应用统一图标（点赞/收藏/评论/上传/举报）。
     - assets/icons/
+    # 品牌素材：启动加载页随 APK 打包，断网时也必须能显示。
+    - assets/brand/

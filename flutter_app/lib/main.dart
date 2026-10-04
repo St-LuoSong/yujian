@@ -1,17 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'app.dart';
-import 'app/bootstrap.dart';
-import 'app/providers.dart';
+import 'app/startup.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final bootstrap = await AppBootstrap.create();
-  runApp(
-    ProviderScope(
-      overrides: [appBootstrapProvider.overrideWithValue(bootstrap)],
-      child: const YujianApp(),
-    ),
-  );
+  // 初始化被搬进 YujianBootstrap：第一帧先画加载页，慢启动与失败都有交代。
+  runApp(const YujianBootstrap());
 }

@@ -58,7 +58,11 @@ class PhotoPlate extends StatelessWidget {
               height: height,
               width: width,
               fit: fit,
-              fadeInDuration: const Duration(milliseconds: 180),
+              // 占位块先淡入、图片再交叉淡入：弱网下是"由虚到实"，
+              // 而不是"空一块 → 突然出现一张图"。
+              fadeInDuration: const Duration(milliseconds: 260),
+              fadeOutDuration: const Duration(milliseconds: 120),
+              placeholderFadeInDuration: const Duration(milliseconds: 180),
               // Real progress when the server reports byte counts, so a slow
               // connection shows movement instead of a static block.
               progressIndicatorBuilder: (_, __, DownloadProgress progress) =>

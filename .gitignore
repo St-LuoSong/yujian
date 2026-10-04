@@ -69,3 +69,15 @@ backend/admin/Dockerfile.cloud
 # store the same megabytes twice for no benefit.
 /icons/
 /yujianlogo.png
+
+# Submission package built by tooling/deploy-keys/package_submission.py.
+# It is a copy of tracked sources plus the built APK, so committing it would
+# duplicate the whole tree and carry ~163 MB of binary.
+/豫见智旅/
+
+# Zip snapshot of that package (kept locally as a restore source for hand-added
+# files such as 作品截图). Same reason: it is a duplicate of the whole tree.
+/豫见智旅.zip
+
+# Sandbox helper scripts are useful to keep; their scratch logs are not.
+tooling/codex/*.txt

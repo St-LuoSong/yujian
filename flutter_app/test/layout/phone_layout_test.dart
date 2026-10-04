@@ -33,7 +33,7 @@ void main() {
       await _pumpApp(tester, entry.value);
       expect(tester.takeException(), isNull);
       expect(find.text('豫见智旅'), findsOneWidget);
-      expect(find.text('一句话，规划你的河南之旅'), findsOneWidget);
+      expect(find.text('河南，让旅行更简单'), findsOneWidget);
 
       // Scroll the whole page so every sliver is laid out at least once.
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -1400));

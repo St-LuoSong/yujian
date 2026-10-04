@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Launch splash.
-     Uses the 宣纸白 (#F7F4EC) paper tone from the design system so the jump
-     into the first Flutter frame is seamless. Modify this file if a licensed
-     full bleed Henan hero image becomes available. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/yujian_paper" />
 
-    <!-- 启动页居中展示豫见智旅 logo；首帧绘制后由 Flutter 接管。 -->
+     改版前这里是"纸白底 + 居中一张小 logo"，在手机上看就是四周一圈空白、
+     中间一个小图标。现在直接铺满整幅启动海报（由
+     tooling/codex/make_splash_assets.py 从 assets/brand/loading.png 生成），
+     底色取海报底部的山影青，图片解码完成前也不闪白。
+
+     gravity="fill" 会按窗口比例拉伸：素材是按 9:20 出的，常见竖屏机上
+     形变在几个百分点以内。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/yujian_splash_bg" />
+
     <item>
         <bitmap
-            android:gravity="center"
-            android:src="@drawable/splash_logo" />
+            android:gravity="fill"
+            android:src="@drawable/splash_poster" />
     </item>
 </layer-list>

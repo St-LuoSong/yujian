@@ -145,6 +145,64 @@ class NearbySearchResult {
   bool get isEmpty => items.isEmpty;
 }
 
+/// 首页聚合内容：横幅文案与图片、主题路线、精选景点、文化锦囊预览。
+///
+/// 服务端把这些放在一个 /home 响应里，客户端也放在一个结果对象里 ——
+/// 拆成四个 Future 只会让首屏出现"图出来了、字还在转"的割裂感。
+///
+/// 与目录一样走 remote -> cache -> 内置兜底：缓存里没有时给出空列表，
+/// 页面据此隐藏对应板块，而不是显示一块空白。
+class HomeResult {
+  const HomeResult({
+    required this.routes,
+    required this.featured,
+    required this.culture,
+    required this.visual,
+    required this.headline,
+    required this.subline,
+    required this.status,
+    this.updatedAt,
+    this.failure,
+  });
+
+  final List<ThemeRoute> routes;
+  final List<Destination> featured;
+  final List<CultureArticleSummary> culture;
+
+  /// 视觉资源槽 -> 可直接加载的图片地址。缺某个槽表示运营还没配，
+  /// 页面退回内置素材，而不是显示碎图。
+  final Map<String, String> visual;
+
+  final String headline;
+  final String subline;
+  final DataStatus status;
+  final DateTime? updatedAt;
+  final ApiFailure? failure;
+}
+
+/// 文化锦囊列表读取结果。
+class CultureResult {
+  const CultureResult({
+    required this.items,
+    required this.status,
+    this.updatedAt,
+    this.failure,
+  });
+
+  final List<CultureArticleSummary> items;
+  final DataStatus status;
+  final DateTime? updatedAt;
+  final ApiFailure? failure;
+}
+
+/// 单篇文章的读取结果。article 为 null 表示这次没拿到。
+class CultureArticleResult {
+  const CultureArticleResult({required this.article, this.failure});
+
+  final CultureArticle? article;
+  final ApiFailure? failure;
+}
+
 /// Single entry point for catalog and trip data.
 ///
 /// Reading strategy is `remote -> offline cache -> bundled demo data`, and the
@@ -210,6 +268,209 @@ class TravelRepository {
           destinations: _filterByCity(destinations, wanted),
           status: DataStatus.mock,
           failure: failure);
+    }
+  }
+
+  /// 收藏榜：被游客收藏最多的景点，默认前 10 条。
+  ///
+  /// 排序与补位都在服务端完成，客户端原样呈现 —— 两头各排一次，迟早会出现
+  /// "页面按收藏排、缓存按别的规则排"的偏差。服务端在收藏数相同时按运营精选
+  /// 补位，所以应用刚上线、收藏还很少的时候，这一页也不会是空的。
+  ///
+  /// 读不到时退回本机目录的前 [limit] 条，并如实标成演示数据。
+  Future<CatalogResult> fetchPopularDestinations({int limit = 10}) async {
+    if (!_config.hasEndpoint) {
+      return CatalogResult(
+        destinations: destinations.take(limit).toList(),
+        status: DataStatus.mock,
+        failure: ApiFailure.configuration(missingEndpointMessage),
+      );
+    }
+    try {
+      final response = await _client.get<List<dynamic>>(
+        '/pois/popular',
+        query: <String, dynamic>{'limit': limit},
+      );
+      final List<Destination> parsed = _parseRankedDestinations(response.data);
+      if (parsed.isEmpty) {
+        throw ApiFailure.parse(StateError('收藏榜为空'));
+      }
+      return CatalogResult(
+        destinations: parsed,
+        status: DataStatus.system,
+        updatedAt: DateTime.now(),
+      );
+    } on ApiFailure catch (failure) {
+      return CatalogResult(
+        destinations: destinations.take(limit).toList(),
+        status: DataStatus.mock,
+        failure: failure,
+      );
+    }
+  }
+
+  /// 首页默认文案。服务端没给出（旧后端、离线）时用这一份。
+  static const String defaultHeadline = '河南，让旅行更简单';
+  static const String defaultSubline = 'AI 智能规划 · 精准推荐 · 陪伴出行';
+
+  /// 读取首页聚合内容。
+  ///
+  /// 走 remote -> cache -> 空：服务端把横幅、主题路线、精选景点和文化预览
+  /// 一次给齐；失败时用上一次的缓存，缓存也没有就返回空列表，页面据此
+  /// 隐藏板块（旧的硬编码走廊仍在本地作为"精选路线"的最终兜底）。
+  Future<HomeResult> fetchHome() async {
+    if (!_config.hasEndpoint) {
+      return HomeResult(
+        routes: const <ThemeRoute>[],
+        featured: const <Destination>[],
+        culture: const <CultureArticleSummary>[],
+        visual: const <String, String>{},
+        headline: defaultHeadline,
+        subline: defaultSubline,
+        status: DataStatus.mock,
+        failure: ApiFailure.configuration(missingEndpointMessage),
+      );
+    }
+    try {
+      final response = await _client.get<Map<String, dynamic>>('/home');
+      final Map<String, dynamic> data = response.data ?? const <String, dynamic>{};
+      await _cache?.write(LocalCache.homeKey, data);
+      return _homeFrom(data, DataStatus.system, DateTime.now());
+    } on ApiFailure catch (failure) {
+      final CachedEntry? cached = await _cache?.read(LocalCache.homeKey);
+      final Object? payload = cached?.payload;
+      if (payload is Map) {
+        return _homeFrom(
+          payload.cast<String, dynamic>(),
+          DataStatus.cached,
+          cached!.updatedAt,
+          failure: failure,
+        );
+      }
+      return HomeResult(
+        routes: const <ThemeRoute>[],
+        featured: const <Destination>[],
+        culture: const <CultureArticleSummary>[],
+        visual: const <String, String>{},
+        headline: defaultHeadline,
+        subline: defaultSubline,
+        status: DataStatus.mock,
+        failure: failure,
+      );
+    }
+  }
+
+  HomeResult _homeFrom(
+    Map<String, dynamic> data,
+    DataStatus status,
+    DateTime? updatedAt, {
+    ApiFailure? failure,
+  }) {
+    final List<ThemeRoute> routes = <ThemeRoute>[];
+    final Object? rawRoutes = data['themeRoutes'];
+    if (rawRoutes is List) {
+      for (final Object? entry in rawRoutes) {
+        if (entry is Map) {
+          routes.add(ThemeRoute.fromJson(entry.cast<String, dynamic>()));
+        }
+      }
+    }
+    final List<Destination> featured = _parseDestinations(data['featuredPois']);
+    final List<CultureArticleSummary> culture = <CultureArticleSummary>[];
+    final Object? rawCulture = data['culturePreview'];
+    if (rawCulture is List) {
+      for (final Object? entry in rawCulture) {
+        if (entry is Map) {
+          culture.add(
+              CultureArticleSummary.fromJson(entry.cast<String, dynamic>()));
+        }
+      }
+    }
+    final Map<String, String> visual = <String, String>{};
+    final Object? rawVisual = data['visualResources'];
+    if (rawVisual is List) {
+      for (final Object? entry in rawVisual) {
+        if (entry is! Map) continue;
+        final Map<String, dynamic> row = entry.cast<String, dynamic>();
+        final String slot = row['slot']?.toString() ?? '';
+        final String raw = row['imageUrl']?.toString() ?? '';
+        if (slot.isEmpty || raw.isEmpty) continue;
+        visual[slot] = _config.resolveMediaUrl(raw);
+      }
+    }
+    final String headline = data['headline']?.toString().trim() ?? '';
+    final String subline = data['subline']?.toString().trim() ?? '';
+    return HomeResult(
+      routes: routes,
+      featured: featured,
+      culture: culture,
+      visual: visual,
+      headline: headline.isEmpty ? defaultHeadline : headline,
+      subline: subline.isEmpty ? defaultSubline : subline,
+      status: status,
+      updatedAt: updatedAt,
+      failure: failure,
+    );
+  }
+
+  /// 读取文化锦囊列表。离线时退回上一次取到的列表。
+  Future<CultureResult> fetchCultureArticles() async {
+    if (!_config.hasEndpoint) {
+      return CultureResult(
+        items: const <CultureArticleSummary>[],
+        status: DataStatus.mock,
+        failure: ApiFailure.configuration(missingEndpointMessage),
+      );
+    }
+    try {
+      final response = await _client.get<List<dynamic>>('/culture-articles');
+      final Object? raw = response.data;
+      final List<Object?> list = raw is List ? raw : const <Object?>[];
+      await _cache?.write(LocalCache.cultureKey, list);
+      return CultureResult(
+        items: _parseCulture(list),
+        status: DataStatus.system,
+        updatedAt: DateTime.now(),
+      );
+    } on ApiFailure catch (failure) {
+      final CachedEntry? cached = await _cache?.read(LocalCache.cultureKey);
+      final Object? payload = cached?.payload;
+      if (payload is List) {
+        return CultureResult(
+          items: _parseCulture(payload),
+          status: DataStatus.cached,
+          updatedAt: cached!.updatedAt,
+          failure: failure,
+        );
+      }
+      return CultureResult(
+        items: const <CultureArticleSummary>[],
+        status: DataStatus.mock,
+        failure: failure,
+      );
+    }
+  }
+
+  List<CultureArticleSummary> _parseCulture(Object? raw) {
+    if (raw is! List) {
+      return const <CultureArticleSummary>[];
+    }
+    return raw
+        .whereType<Map>()
+        .map((Map<dynamic, dynamic> item) =>
+            CultureArticleSummary.fromJson(item.cast<String, dynamic>()))
+        .toList();
+  }
+
+  Future<CultureArticleResult> fetchCultureArticle(String id) async {
+    if (!_config.hasEndpoint) {
+      return const CultureArticleResult(article: null);
+    }
+    try {
+      final Map<String, dynamic> data = await _getJson('/culture-articles/$id');
+      return CultureArticleResult(article: CultureArticle.fromJson(data));
+    } on ApiFailure catch (failure) {
+      return CultureArticleResult(article: null, failure: failure);
     }
   }
 
@@ -815,6 +1076,24 @@ class TravelRepository {
         .map((item) =>
             Destination.fromJson(_reachablePhoto(item.cast<String, dynamic>())))
         .toList();
+  }
+
+  /// 解析 `/pois/popular` 的 `{poi, favoriteCount}` 行，同时兼容旧后端的平铺写法。
+  List<Destination> _parseRankedDestinations(Object? data) {
+    if (data is! List) {
+      return const <Destination>[];
+    }
+    return data.whereType<Map>().map((Map<dynamic, dynamic> item) {
+      final Map<String, dynamic> row = item.cast<String, dynamic>();
+      final Object? poi = row['poi'];
+      if (poi is Map) {
+        return Destination.fromRankedJson(<String, dynamic>{
+          'poi': _reachablePhoto(poi.cast<String, dynamic>()),
+          'favoriteCount': row['favoriteCount'],
+        });
+      }
+      return Destination.fromJson(_reachablePhoto(row));
+    }).toList();
   }
 
   /// The backend derives a photo URL from whoever uploaded it, so a picture

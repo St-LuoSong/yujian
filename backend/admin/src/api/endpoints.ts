@@ -24,6 +24,14 @@ import type {
   ToolHealth,
   AppReleaseView,
   PublishAppReleaseInput,
+  CultureArticleInput,
+  CultureArticleView,
+  PoiMediaInput,
+  PoiMediaView,
+  ThemeRouteInput,
+  ThemeRouteView,
+  VisualResourceInput,
+  VisualResourceView,
 } from './types'
 
 export const authApi = {
@@ -45,6 +53,49 @@ export const poiApi = {
    */
   geocode: (name: string, city?: string) =>
     api.post<GeocodePreview>('/admin/pois/geocode', { name, city: city ?? null }),
+  /** 首页推荐位开关与排序。和整份编辑分开，勾一下就能上/下首页。 */
+  setFeatured: (id: string, homeFeatured: boolean, featuredSortOrder?: number) =>
+    api.patch<PoiView>('/admin/pois/' + encodeURIComponent(id) + '/featured', {
+      homeFeatured,
+      featuredSortOrder: featuredSortOrder ?? null,
+    }),
+  media: (id: string) =>
+    api.get<PoiMediaView[]>('/admin/pois/' + encodeURIComponent(id) + '/media'),
+  addMedia: (id: string, input: PoiMediaInput) =>
+    api.post<PoiMediaView>('/admin/pois/' + encodeURIComponent(id) + '/media', input),
+  updateMedia: (id: string, mediaId: number, input: PoiMediaInput) =>
+    api.put<PoiMediaView>(
+      '/admin/pois/' + encodeURIComponent(id) + '/media/' + mediaId,
+      input,
+    ),
+  removeMedia: (id: string, mediaId: number) =>
+    api.del<void>('/admin/pois/' + encodeURIComponent(id) + '/media/' + mediaId),
+}
+
+/** 应用视觉资源：首页横幅、个人页背景、行程默认封面、各处占位图。 */
+export const appResourceApi = {
+  list: () => api.get<VisualResourceView[]>('/admin/app-resources'),
+  save: (slot: string, input: VisualResourceInput) =>
+    api.put<VisualResourceView>('/admin/app-resources/' + encodeURIComponent(slot), input),
+}
+
+/** 主题路线（示范走廊）。 */
+export const themeRouteApi = {
+  list: () => api.get<ThemeRouteView[]>('/admin/theme-routes'),
+  create: (input: ThemeRouteInput) => api.post<ThemeRouteView>('/admin/theme-routes', input),
+  update: (id: string, input: ThemeRouteInput) =>
+    api.put<ThemeRouteView>('/admin/theme-routes/' + encodeURIComponent(id), input),
+  remove: (id: string) => api.del<void>('/admin/theme-routes/' + encodeURIComponent(id)),
+}
+
+/** 文化锦囊。 */
+export const cultureArticleApi = {
+  list: () => api.get<CultureArticleView[]>('/admin/culture-articles'),
+  get: (id: string) => api.get<CultureArticleView>('/admin/culture-articles/' + encodeURIComponent(id)),
+  create: (input: CultureArticleInput) => api.post<CultureArticleView>('/admin/culture-articles', input),
+  update: (id: string, input: CultureArticleInput) =>
+    api.put<CultureArticleView>('/admin/culture-articles/' + encodeURIComponent(id), input),
+  remove: (id: string) => api.del<void>('/admin/culture-articles/' + encodeURIComponent(id)),
 }
 
 export const mediaApi = {

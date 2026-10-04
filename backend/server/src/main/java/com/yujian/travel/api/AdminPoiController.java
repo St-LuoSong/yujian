@@ -81,6 +81,48 @@ public class AdminPoiController {
         return updated;
     }
 
+    /** 首页推荐位开关与排序。和整份编辑分开，勾一下就能上/下首页。 */
+    @PatchMapping("/{id}/featured")
+    public PoiModels.PoiView featured(@PathVariable String id,
+                                      @RequestBody PoiModels.FeaturedInput input) {
+        PoiModels.PoiView updated = contentService.setFeatured(id, input);
+        operationLog.record(updated.homeFeatured() ? "POI_FEATURE" : "POI_UNFEATURE",
+            "poi:" + id, updated.name());
+        return updated;
+    }
+
+    // ---------- 景区图集 ----------
+
+    @GetMapping("/{id}/media")
+    public List<PoiModels.MediaView> media(@PathVariable String id) {
+        return contentService.listMedia(id);
+    }
+
+    @PostMapping("/{id}/media")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PoiModels.MediaView addMedia(@PathVariable String id,
+                                        @Valid @RequestBody PoiModels.MediaInput input) {
+        PoiModels.MediaView created = contentService.addMedia(id, input);
+        operationLog.record("POI_MEDIA_ADD", "poi:" + id + ":media:" + created.id(), created.imageUrl());
+        return created;
+    }
+
+    @PutMapping("/{id}/media/{mediaId}")
+    public PoiModels.MediaView updateMedia(@PathVariable String id,
+                                           @PathVariable Long mediaId,
+                                           @Valid @RequestBody PoiModels.MediaInput input) {
+        PoiModels.MediaView updated = contentService.updateMedia(id, mediaId, input);
+        operationLog.record("POI_MEDIA_UPDATE", "poi:" + id + ":media:" + mediaId, updated.imageUrl());
+        return updated;
+    }
+
+    @DeleteMapping("/{id}/media/{mediaId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMedia(@PathVariable String id, @PathVariable Long mediaId) {
+        contentService.deleteMedia(id, mediaId);
+        operationLog.record("POI_MEDIA_DELETE", "poi:" + id + ":media:" + mediaId, null);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable String id) {

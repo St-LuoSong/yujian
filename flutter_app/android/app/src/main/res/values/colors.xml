@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand palette shared with the Flutter theme, see flutter_app/lib/app.dart.
-         中原青黛 #174A47 / 宣纸白 #F7F4EC -->
-    <color name="yujian_teal">#FF174A47</color>
-    <color name="yujian_paper">#FFF7F4EC</color>
-    <color name="yujian_gold">#FFE8B45A</color>
+    <!-- Brand palette shared with the Flutter theme,
+         see flutter_app/lib/core/theme/app_colors.dart.
+         品牌深青 #145D55 / 页面雾白 #F4F8F6 / 麦穗金 #E8B45B。
+         原生启动背景与 Flutter 首帧的底色一致，进程启动到加载图之间不闪色。 -->
+    <color name="yujian_teal">#FF145D55</color>
+    <color name="yujian_paper">#FFF4F8F6</color>
+    <color name="yujian_gold">#FFE8B45B</color>
+    <!-- 启动海报底部山影的青绿：原生启动窗口的底色，进程刚起来、图片还没解码
+         完的那一瞬间也不闪白，和 Flutter 那张全屏海报接得上。 -->
+    <color name="yujian_splash_bg">#FF34776C</color>
     <!-- 应用图标底色：纯白，衔接 logo 圆角外的透明区域。 -->
     <color name="yujian_icon_background">#FFFFFFFF</color>
 </resources>

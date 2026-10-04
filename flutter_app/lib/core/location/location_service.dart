@@ -94,9 +94,13 @@ class LocationService {
 
   /// 取坐标的超时。
   ///
-  /// 12 秒是"走到窗边再试一次"的量级；再长用户就会以为应用卡死了，
+  /// 15 秒是"走到窗边再试一次"的量级；再长用户就会以为应用卡死了，
   /// 而这个页面本来就有替代路径，没必要为了一个坐标把人按住不放。
-  static const Duration timeout = Duration(seconds: 12);
+  static const Duration timeout = Duration(seconds: 15);
+
+  /// 兜底的一次粗定位。走网络/基站，室内和模拟器上更容易出结果，
+  /// 「三公里内有什么」这个精度足够。
+  static const Duration coarseTimeout = Duration(seconds: 8);
 
   Future<LocationAttempt> currentFix() async {
     final bool serviceEnabled;
@@ -147,6 +151,26 @@ class LocationService {
         break;
     }
 
+    // 1) 先问"上一次已知位置"。这条几乎立刻返回，能省掉一整个 GPS 冷启动：
+    //    刚从地图/其它应用切过来、模拟器已经喂过坐标时，基本都有值。
+    //    读不到不算错误，继续走实时定位。
+    try {
+      final Position? last = await Geolocator.getLastKnownPosition();
+      if (last != null) {
+        return LocationAttempt(
+          readiness: LocationReadiness.ready,
+          fix: LocationFix(
+            lng: last.longitude,
+            lat: last.latitude,
+            accuracyMeters: last.accuracy,
+          ),
+        );
+      }
+    } on Object {
+      // 忽略：下面还有两条路。
+    }
+
+    // 2) 实时定位，中等精度。
     try {
       final Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -165,10 +189,29 @@ class LocationService {
         ),
       );
     } on TimeoutException {
-      return const LocationAttempt(
-        readiness: LocationReadiness.locateFailed,
-        message: '定位超时了。在室内或地下车库很常见，走到窗边再试一次。',
-      );
+      // 3) 再给一次机会：换成低精度（网络/基站），室内更容易出结果。
+      try {
+        final Position coarse = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: coarseTimeout,
+          ),
+        );
+        return LocationAttempt(
+          readiness: LocationReadiness.ready,
+          fix: LocationFix(
+            lng: coarse.longitude,
+            lat: coarse.latitude,
+            accuracyMeters: coarse.accuracy,
+          ),
+        );
+      } on Object {
+        return const LocationAttempt(
+          readiness: LocationReadiness.locateFailed,
+          message: '两次都没取到坐标。室内、地下车库，或者模拟器还没设置位置时都会这样 ——'
+              '走到窗边再点一次「重新定位」，或者直接用下面「按城市浏览景点」。',
+        );
+      }
     } on Object {
       return const LocationAttempt(
         readiness: LocationReadiness.locateFailed,

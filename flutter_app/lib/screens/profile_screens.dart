@@ -74,7 +74,12 @@ class ProfileScreen extends ConsumerWidget {
     final double page = AppSpacing.pageFor(MediaQuery.sizeOf(context).width);
     final AsyncValue<UserProfile?> session = ref.watch(sessionProvider);
     final int unread = ref.watch(unreadNoticeCountProvider);
-
+    // 「我的」页头图由运营台在「应用素材与内容库」里配 PROFILE_HEADER 槽；
+    // 没配就是空串，页面回落原来的样子。
+    final String headerImage = ref
+            .watch(visualResourcesProvider)
+            .valueOrNull?['PROFILE_HEADER'] ??
+        '';
     return Scaffold(
       backgroundColor: AppColors.ground,
       appBar: AppBar(title: const Text('我的')),
@@ -87,7 +92,10 @@ class ProfileScreen extends ConsumerWidget {
               message: error is ApiFailure ? error.message : '账号状态读取失败，请稍后重试。',
               onRetry: () => ref.invalidate(sessionProvider),
             ),
-            data: (UserProfile? user) => _ProfileHero(user: user),
+            data: (UserProfile? user) => _ProfileHeroWithBackground(
+              user: user,
+              imageUrl: headerImage,
+            ),
           ),
           const SizedBox(height: AppSpacing.section),
           _ImpactCard(),
@@ -329,6 +337,49 @@ class _ImpactTile extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// 带背景图的身份卡。
+///
+/// 单独包一层而不是改 `_ProfileHero` 内部：卡片那棵布局树已经稳定（头像、
+/// 用户名、邮箱、两枚徽标），把照片垫在它下面比在卡片里再挖一层 Stack 更不容易
+/// 碰坏既有排版。照片在卡片上方露出 40pt，形成一条"照片带"。
+class _ProfileHeroWithBackground extends StatelessWidget {
+  const _ProfileHeroWithBackground({
+    required this.user,
+    required this.imageUrl,
+  });
+
+  final UserProfile? user;
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) {
+      return _ProfileHero(user: user);
+    }
+    return Stack(
+      children: <Widget>[
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 96,
+          child: PhotoPlate(
+            url: imageUrl,
+            height: 96,
+            radius: AppSpacing.radiusCard,
+            scrim: true,
+            semanticLabel: '我的页背景图',
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 40),
+          child: _ProfileHero(user: user),
+        ),
+      ],
+    );
+  }
 }
 
 /// 页面顶部的身份卡：圆形头像 + 用户名 + 邮箱 + 两枚状态徽标。

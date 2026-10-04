@@ -21,6 +21,10 @@ class LocalCache {
 
   static const String catalogKey = 'catalog';
   static const String latestPlanKey = 'latest_plan';
+  /// 首页聚合内容（横幅、主题路线、精选景点、文化预览）。
+  static const String homeKey = 'home';
+  /// 文化锦囊列表，供断网时翻阅已取到的文章。
+  static const String cultureKey = 'culture';
 
   final Directory directory;
 

@@ -17,9 +17,18 @@ class Destination {
     this.sourceUrl = '',
     this.imageStatus = '',
     this.dataStatus = DataStatus.mock,
+    this.openingHours = '',
+    this.reservationNote = '',
+    this.gallery = const <String>[],
+    this.favoriteCount = 0,
   });
 
-  factory Destination.fromJson(Map<String, dynamic> json) => Destination(
+  /// [favoriteCount] 只有收藏榜接口会给出；其余接口不统计收藏数，保持 0。
+  factory Destination.fromJson(
+    Map<String, dynamic> json, {
+    int favoriteCount = 0,
+  }) =>
+      Destination(
         id: _text(json['id']),
         name: _text(json['name']),
         city: _text(json['city']),
@@ -34,7 +43,23 @@ class Destination {
         sourceUrl: _text(json['sourceUrl']),
         imageStatus: _text(json['imageStatus']),
         dataStatus: DataStatus.fromServer(json['dataStatus']),
+        openingHours: _text(json['openingHours']),
+        reservationNote: _text(json['reservationNote']),
+        gallery: _textList(json['gallery']),
+        favoriteCount: favoriteCount,
       );
+
+  /// 收藏榜的一行：`{"poi": {...}, "favoriteCount": 3}`。
+  ///
+  /// 后端把计数包在景点对象外面，是为了让 /pois 那种"没统计过收藏数"的响应
+  /// 不至于看起来像"零收藏"。这里兼容没有包裹的写法，旧后端也能读出景点。
+  factory Destination.fromRankedJson(Map<String, dynamic> json) {
+    final Object? poi = json['poi'];
+    return Destination.fromJson(
+      poi is Map ? poi.cast<String, dynamic>() : json,
+      favoriteCount: _integer(json['favoriteCount']),
+    );
+  }
 
   final String id,
       name,
@@ -89,6 +114,22 @@ class Destination {
 
   final int ticket;
   final DataStatus dataStatus;
+
+  /// 被收藏的次数。
+  ///
+  /// 0 表示"没有统计过"，不是"没人收藏"：只有收藏榜接口会带上这个数，
+  /// 所以除了榜单之外的地方都不显示它。
+  final int favoriteCount;
+
+  /// 开放时间。空串表示运营台还没登记 —— 详情页显示"请以景区公告为准"，
+  /// 不编造一个看起来具体的时段。
+  final String openingHours;
+
+  /// 预约说明。空串表示没有需要提醒的预约要求。
+  final String reservationNote;
+
+  /// 详情页图集（不含封面）。为空时详情页的"图集"标签页不出现。
+  final List<String> gallery;
 }
 
 /// Editorial themed corridor shown on the discover page.
@@ -107,6 +148,130 @@ class TravelCorridor {
 
   final String title, subtitle, duration, budget, image;
   final List<String> tags;
+}
+
+/// 运营台维护的主题路线。
+///
+/// 与 TravelCorridor 的区别：这里多了规划提示词与图片出处，点一条路线时能
+/// 直接把一句完整的自然语言带去规划页，而不是让客户端自己拼一句话。
+class ThemeRoute {
+  const ThemeRoute({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.cities,
+    required this.duration,
+    required this.budget,
+    required this.coverUrl,
+    required this.highlights,
+    required this.planningPrompt,
+    required this.imageCredit,
+    required this.sourceUrl,
+  });
+
+  factory ThemeRoute.fromJson(Map<String, dynamic> json) => ThemeRoute(
+        id: _text(json['id']),
+        title: _text(json['title']),
+        subtitle: _text(json['subtitle']),
+        cities: _text(json['cities']),
+        duration: _text(json['duration']),
+        budget: _text(json['budget']),
+        coverUrl: _text(json['coverUrl']),
+        highlights: _textList(json['highlights']),
+        planningPrompt: _text(json['planningPrompt']),
+        imageCredit: _text(json['imageCredit']),
+        sourceUrl: _text(json['sourceUrl']),
+      );
+
+  final String id, title, subtitle, cities, duration, budget, coverUrl;
+  final String planningPrompt, imageCredit, sourceUrl;
+  final List<String> highlights;
+
+  /// 点这条路线时带去规划页的句子；没配时退回由标题与时长拼出的一句。
+  String get prompt {
+    if (planningPrompt.trim().isNotEmpty) {
+      return planningPrompt.trim();
+    }
+    return '想把$title这条线走一遍，$duration，预算$budget，帮我安排行程。';
+  }
+}
+
+/// 文化锦囊列表项（不含正文）。
+class CultureArticleSummary {
+  const CultureArticleSummary({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.category,
+    required this.coverUrl,
+    required this.imageCredit,
+    required this.sourceUrl,
+    this.readingMinutes = 1,
+    this.author = '',
+    this.likeCount = 0,
+  });
+
+  factory CultureArticleSummary.fromJson(Map<String, dynamic> json) {
+    // 老服务端没有这个字段，缺省按 1 分钟算，而不是显示"阅读 0 分钟"。
+    final int minutes = _integer(json['readingMinutes']);
+    return CultureArticleSummary(
+        id: _text(json['id']),
+        title: _text(json['title']),
+        summary: _text(json['summary']),
+        category: _text(json['category']),
+        coverUrl: _text(json['coverUrl']),
+        imageCredit: _text(json['imageCredit']),
+        sourceUrl: _text(json['sourceUrl']),
+        readingMinutes: minutes < 1 ? 1 : minutes,
+        author: _text(json['author']),
+        likeCount: _integer(json['likeCount']),
+      );
+  }
+
+  final String id, title, summary, category, coverUrl, imageCredit, sourceUrl;
+
+  /// 阅读时长（分钟），由服务端按正文字数估算。
+  final int readingMinutes;
+
+  /// 署名。为空表示运营台还没填，界面就不显示这一项。
+  final String author;
+
+  /// 展示用点赞数（运营台维护，见后端 V7 注释）。
+  final int likeCount;
+}
+
+/// 文化锦囊详情（含正文）。
+class CultureArticle {
+  const CultureArticle({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.content,
+    required this.category,
+    required this.coverUrl,
+    required this.imageCredit,
+    required this.sourceUrl,
+    this.author = '',
+    this.likeCount = 0,
+  });
+
+  factory CultureArticle.fromJson(Map<String, dynamic> json) => CultureArticle(
+        id: _text(json['id']),
+        title: _text(json['title']),
+        summary: _text(json['summary']),
+        content: _text(json['content']),
+        category: _text(json['category']),
+        coverUrl: _text(json['coverUrl']),
+        imageCredit: _text(json['imageCredit']),
+        sourceUrl: _text(json['sourceUrl']),
+        author: _text(json['author']),
+        likeCount: _integer(json['likeCount']),
+      );
+
+  final String id, title, summary, content, category, coverUrl;
+  final String imageCredit, sourceUrl;
+  final String author;
+  final int likeCount;
 }
 
 /// A single stop on the itinerary timeline.

@@ -21,6 +21,7 @@ import '../core/widgets/section_header.dart';
 import '../core/widgets/surface_card.dart';
 import '../core/widgets/tag_pill.dart';
 import '../data/repositories/travel_repository.dart';
+import '../models/planner_preset.dart';
 import '../models/travel_models.dart';
 import '../models/trip_models.dart';
 import 'additional_screens.dart';
@@ -87,6 +88,9 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
   bool _historyOpen = false;
   bool _conditionsOpen = true;
 
+  /// 上一次点过的场景名。只用于表单上方那行说明，用户关掉就不再显示。
+  String? _appliedScene;
+
   /// 行程页现在是两态：默认是"我的行程"首页，点"新建一个行程"才进入规划表单。
   ///
   /// 以前这一页一进来就 `_restoreLatest()`，把最新那份行程直接摊开，
@@ -139,11 +143,48 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
     // 从首页带着一句话过来时直接进表单：用户已经表达过意图，再让他点一次
     // "新建一个行程"是多余的一步。其余情况都停在"我的行程"首页。
     final String? pending = ref.read(pendingPromptProvider);
+    final PlannerPreset? preset = ref.read(pendingPlannerPresetProvider);
     _plannerOpen = pending != null && pending.isNotEmpty;
     if (_plannerOpen) {
       _note.text = pending!;
+      if (preset != null) {
+        _applyPreset(preset);
+        ref.read(pendingPlannerPresetProvider.notifier).state = null;
+      }
       unawaited(_loadCatalog());
     }
+  }
+
+  /// 把首页场景带过来的条件填进表单。
+  ///
+  /// 只覆盖场景明确给出的字段：场景没提预算、儿童数这些，就保持用户原本的
+  /// 选择，不替他做决定。填完在表单上方留一行说明"这是按哪个场景填的"。
+  void _applyPreset(PlannerPreset preset) {
+    if (preset.origin != null) {
+      _origin = preset.origin!;
+    }
+    if (preset.destination != null) {
+      _destination = preset.destination!;
+    }
+    if (preset.days != null) {
+      _days = preset.days!.clamp(_minDays, _maxDays);
+      _syncDaysField();
+    }
+    if (preset.adults != null) {
+      _adults = preset.adults!;
+    }
+    if (preset.interests.isNotEmpty) {
+      _interests
+        ..clear()
+        ..addAll(preset.interests);
+    }
+    if (preset.pace != null) {
+      _pace = preset.pace!;
+    }
+    if (preset.transport != null) {
+      _transport = preset.transport!;
+    }
+    _appliedScene = preset.label;
   }
 
   @override
@@ -361,6 +402,24 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
       });
     });
 
+    // 场景标签还会带来一份预填条件。首页先写预设、再切 tab，所以两个通知都会到，
+    // 这里各自处理自己的那一份，互不依赖到达顺序。
+    ref.listen<PlannerPreset?>(
+      pendingPlannerPresetProvider,
+      (PlannerPreset? previous, PlannerPreset? next) {
+        if (next == null) {
+          return;
+        }
+        ref.read(pendingPlannerPresetProvider.notifier).state = null;
+        setState(() {
+          _applyPreset(next);
+          _plannerOpen = true;
+          _conditionsOpen = true;
+          _result = null;
+        });
+      },
+    );
+
     if (!_plannerOpen) {
       return _JourneyHub(repository: widget.repository, onCreate: _openPlanner);
     }
@@ -395,6 +454,13 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
           if (_result == null) ...<Widget>[
             const _JourneyIntro(),
             const SizedBox(height: AppSpacing.section),
+          ],
+          if (_appliedScene != null) ...<Widget>[
+            _AppliedSceneNote(
+              label: _appliedScene!,
+              onDismiss: () => setState(() => _appliedScene = null),
+            ),
+            const SizedBox(height: AppSpacing.content),
           ],
           _ConditionCard(
             open: _conditionsOpen,
@@ -590,6 +656,56 @@ class _JourneyScreenState extends ConsumerState<JourneyScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
+}
+
+/// 表单上方那行"这是按哪个场景填的"。
+///
+/// 场景标签会替用户填好几项条件，不说明来源的话，用户看到目的地、天数都变了
+/// 会以为自己点错了。这里给出场景名、一句确认，并允许顺手关掉。
+class _AppliedSceneNote extends StatelessWidget {
+  const _AppliedSceneNote({required this.label, required this.onDismiss});
+
+  final String label;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        decoration: BoxDecoration(
+          color: AppColors.celadonPale,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusSmall),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(
+              Icons.auto_awesome_outlined,
+              size: 17,
+              color: AppColors.celadonDeep,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '已按「$label」填好条件，可以直接生成，也可以改。',
+                style: const TextStyle(
+                  fontSize: AppTypography.caption,
+                  color: AppColors.inkSoft,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: onDismiss,
+              tooltip: '知道了',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(
+                Icons.close,
+                size: 16,
+                color: AppColors.crackle,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _JourneyIntro extends StatelessWidget {
@@ -2081,6 +2197,12 @@ class _FootprintCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _FootprintBars(
+            cities: cities.length,
+            km: data.totalKm,
+            days: data.totalDays,
+          ),
           const SizedBox(height: 14),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -2138,17 +2260,35 @@ class _HenanFootprintMap extends StatefulWidget {
 }
 
 class _HenanFootprintMapState extends State<_HenanFootprintMap>
-    with SingleTickerProviderStateMixin {
-  /// 一次性点亮动画。**不做循环**：首页上的地图每次呼吸一下，
-  /// 在移动端只会让人以为它在加载。
+    with TickerProviderStateMixin {
+  /// 一次性点亮动画：进场时把记号"长"出来。
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
   )..forward();
 
+  /// 点亮之后的闪烁。幅度很小、节奏很慢，说明"这里是你走过的城市"，
+  /// 而不是让人以为地图在加载；系统开了"减少动效"就停掉，星星保持常亮。
+  late final AnimationController _twinkle = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat(reverse: true);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bool still = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (still && _twinkle.isAnimating) {
+      _twinkle.stop();
+    } else if (!still && !_twinkle.isAnimating) {
+      _twinkle.repeat(reverse: true);
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _twinkle.dispose();
     super.dispose();
   }
 
@@ -2178,11 +2318,14 @@ class _HenanFootprintMapState extends State<_HenanFootprintMap>
                     const ColoredBox(color: AppColors.surfaceTint),
               ),
               AnimatedBuilder(
-                animation: _controller,
+                animation:
+                    Listenable.merge(<Listenable>[_controller, _twinkle]),
                 builder: (BuildContext context, Widget? child) => CustomPaint(
                   painter: _HenanFootprintPainter(
                     lit: lit,
                     progress: Curves.easeOutCubic.transform(_controller.value),
+                    pulse: 0.5 +
+                        0.5 * Curves.easeInOut.transform(_twinkle.value),
                   ),
                 ),
               ),
@@ -2198,10 +2341,32 @@ class _HenanFootprintMapState extends State<_HenanFootprintMap>
 ///
 /// 只画记号，不画文字：地名在底图里已经有了，再画一遍就是重影。
 class _HenanFootprintPainter extends CustomPainter {
-  _HenanFootprintPainter({required this.lit, required this.progress});
+  _HenanFootprintPainter({
+    required this.lit,
+    required this.progress,
+    required this.pulse,
+  });
 
   final Set<String> lit;
   final double progress;
+
+  /// 0→1 的呼吸值，用来调制光晕与星星的大小、亮度。
+  final double pulse;
+
+  /// 单位五角星（外径 1、内径 0.42，尖端朝上）：外顶点与内顶点交替。
+  /// 写成常量是为了不在绘制路径里现算三角函数 —— 每帧都算会白白吃 CPU。
+  static const List<Offset> _starUnit = <Offset>[
+    Offset(0.000, -1.000),
+    Offset(0.247, -0.340),
+    Offset(0.951, -0.309),
+    Offset(0.399, 0.130),
+    Offset(0.588, 0.809),
+    Offset(0.000, 0.420),
+    Offset(-0.588, 0.809),
+    Offset(-0.399, 0.130),
+    Offset(-0.951, -0.309),
+    Offset(-0.247, -0.340),
+  ];
 
   /// 18 个地市名在这张底图上的相对位置（名字的中心，左上为原点）。
   static const Map<String, Offset> _labels = <String, Offset>{
@@ -2240,30 +2405,117 @@ class _HenanFootprintPainter extends CustomPainter {
         label.dx * size.width,
         (label.dy + _dotLift) * size.height,
       );
-      // 三层：金色光晕 → 白圈（把点从蓝色底图里托起来）→ 朱砂点。
+      // 三层：金色光晕（随 pulse 呼吸）→ 白圈（把记号从蓝色底图里托起来）
+      // → 会闪的金色五角星。星比圆点更容易被认成"你走过的城市"。
       canvas.drawCircle(
         center,
-        unit * 0.045 * progress,
-        Paint()..color = AppColors.amber.withValues(alpha: 0.24 * progress),
+        unit * (0.045 + 0.014 * pulse) * progress,
+        Paint()
+          ..color = AppColors.amber
+              .withValues(alpha: (0.16 + 0.26 * pulse) * progress),
       );
       canvas.drawCircle(
         center,
         unit * 0.020 * progress,
         Paint()..color = Colors.white.withValues(alpha: 0.95 * progress),
       );
-      canvas.drawCircle(
-        center,
-        unit * 0.012,
-        Paint()..color = AppColors.kilnRed,
-      );
+      final double outer = unit * (0.020 + 0.009 * pulse) * progress;
+      final Path star = Path();
+      for (int i = 0; i < _starUnit.length; i++) {
+        final Offset point = _starUnit[i];
+        final double x = center.dx + point.dx * outer;
+        final double y = center.dy + point.dy * outer;
+        if (i == 0) {
+          star.moveTo(x, y);
+        } else {
+          star.lineTo(x, y);
+        }
+      }
+      canvas.drawPath(star..close(), Paint()..color = AppColors.amberInk);
     });
   }
 
   @override
   bool shouldRepaint(_HenanFootprintPainter oldDelegate) =>
       oldDelegate.progress != progress ||
+      oldDelegate.pulse != pulse ||
       oldDelegate.lit.length != lit.length ||
       !oldDelegate.lit.containsAll(lit);
+}
+
+/// 三个数字的比例条：把"城市 / 里程 / 天数"的相对大小摆出来。
+///
+/// 只做相对比例，不做"完成度"—— 旅行没有 KPI，条子长短不该被读成及格或不及格。
+/// 里程按 100km 折算成与"个城市""天"同一量级的刻度。
+class _FootprintBars extends StatelessWidget {
+  const _FootprintBars({
+    required this.cities,
+    required this.km,
+    required this.days,
+  });
+
+  final int cities;
+  final double km;
+  final int days;
+
+  @override
+  Widget build(BuildContext context) {
+    final double cityWeight = cities.toDouble();
+    final double kmWeight = km / 100;
+    final double dayWeight = days.toDouble();
+    final double total = cityWeight + kmWeight + dayWeight;
+    if (total <= 0) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      children: <Widget>[
+        _bar('城市', cityWeight / total, AppColors.celadon, '$cities 个'),
+        const SizedBox(height: 7),
+        _bar('里程', kmWeight / total, AppColors.amberInk, '${km.round()} km'),
+        const SizedBox(height: 7),
+        _bar('天数', dayWeight / total, AppColors.kilnRed, '$days 天'),
+      ],
+    );
+  }
+
+  Widget _bar(String label, double ratio, Color color, String value) => Row(
+        children: <Widget>[
+          SizedBox(
+            width: 32,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.crackle,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                // 最小 3%：某项占比很小时也留一条看得见的线，不然像没画。
+                value: ratio.clamp(0.03, 1.0),
+                minHeight: 6,
+                backgroundColor: AppColors.surfaceSunken,
+                color: color,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 54,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.inkSoft,
+              ),
+            ),
+          ),
+        ],
+      );
 }
 
 /// 金额：三位一分组，符号跟着正负号走。

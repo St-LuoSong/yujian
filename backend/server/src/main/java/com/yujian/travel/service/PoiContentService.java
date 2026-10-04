@@ -7,6 +7,9 @@ import com.yujian.travel.common.GeoCoordinate;
 import com.yujian.travel.common.NearbySearch;
 import com.yujian.travel.common.PoiImageAudit;
 import com.yujian.travel.domain.PoiEntity;
+import com.yujian.travel.domain.PoiMediaEntity;
+import com.yujian.travel.repository.FavoriteRepository;
+import com.yujian.travel.repository.PoiMediaRepository;
 import com.yujian.travel.repository.PoiRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +48,10 @@ public class PoiContentService {
      */
     private static final int MAX_PAGE_SIZE = 50;
 
+    /** 收藏榜的默认条数与上限：入口是"前十个"，但允许调用方翻更长的一份。 */
+    private static final int DEFAULT_POPULAR_LIMIT = 10;
+    private static final int MAX_POPULAR_LIMIT = 50;
+
     /**
      * 附近景点的半径与条数区间。
      *
@@ -58,9 +66,14 @@ public class PoiContentService {
     private static final int MAX_NEARBY_LIMIT = 50;
 
     private final PoiRepository repository;
+    private final PoiMediaRepository mediaRepository;
+    private final FavoriteRepository favoriteRepository;
 
-    public PoiContentService(PoiRepository repository) {
+    public PoiContentService(PoiRepository repository, PoiMediaRepository mediaRepository,
+                             FavoriteRepository favoriteRepository) {
         this.repository = repository;
+        this.mediaRepository = mediaRepository;
+        this.favoriteRepository = favoriteRepository;
     }
 
     @Transactional(readOnly = true)
@@ -68,14 +81,14 @@ public class PoiContentService {
         List<PoiEntity> rows = city == null || city.isBlank()
             ? repository.findByPublishedTrueOrderBySortOrderAscNameAsc()
             : repository.findByPublishedTrueAndCityContainingOrderBySortOrderAscNameAsc(city.trim());
-        return rows.stream().map(PoiContentService::toPublic).toList();
+        return rows.stream().map(this::toPublic).toList();
     }
 
     @Transactional(readOnly = true)
     public Optional<TravelModels.Poi> publicPoi(String id) {
         return repository.findById(id)
             .filter(PoiEntity::isPublished)
-            .map(PoiContentService::toPublic);
+            .map(this::toPublic);
     }
 
     /**
@@ -84,19 +97,74 @@ public class PoiContentService {
      * 页码与页大小都容错：非法值一律夹回合法区间，不抛 400。首页只是想把内容
      * 铺出来，一个手滑的 page=0 不该变成一张错误页。
      */
+    /**
+     * 上架景点的分页读取（支持城市 / 分类 / 关键词）。
+     *
+     * 三个条件都在数据库里过滤。分类是精确匹配（分类是运营台维护的枚举式标签），
+     * 城市与关键词是包含匹配 —— "洛阳"要能命中"洛阳"与"洛阳 · 伊川"这类写法。
+     */
     @Transactional(readOnly = true)
-    public TravelModels.PoiPage publicPoiPage(String city, Integer page, Integer size) {
+    public TravelModels.PoiPage publicPoiPage(String city, String category, String keyword,
+                                              Integer page, Integer size) {
         int safePage = page == null || page < 1 ? 1 : page;
         int safeSize = size == null || size < 1 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         Pageable pageable = PageRequest.of(safePage - 1, safeSize,
             Sort.by(Sort.Order.asc("sortOrder"), Sort.Order.asc("name")));
-        Page<PoiEntity> rows = city == null || city.isBlank()
-            ? repository.findByPublishedTrue(pageable)
-            : repository.findByPublishedTrueAndCityContaining(city.trim(), pageable);
+        Page<PoiEntity> rows = repository.searchPublished(
+            trimToNull(city), trimToNull(category), trimToNull(keyword), pageable);
         List<TravelModels.Poi> items = rows.getContent().stream()
-            .map(PoiContentService::toPublic)
+            .map(this::toPublic)
             .toList();
         return new TravelModels.PoiPage(items, safePage, safeSize, rows.getTotalElements(), rows.hasNext());
+    }
+
+    /** 首页"热门推荐"：运营台勾选的精选景点，最多 12 条。 */
+    @Transactional(readOnly = true)
+    public List<TravelModels.Poi> featuredPois() {
+        return repository.findByPublishedTrueAndHomeFeaturedTrueOrderByFeaturedSortOrderAscSortOrderAscNameAsc()
+            .stream()
+            .limit(12)
+            .map(this::toPublic)
+            .toList();
+    }
+
+    /**
+     * 收藏榜：按景点被收藏的次数排序，最多 {@code limit} 条。
+     *
+     * <p>收藏数为 0 的景点照样在榜上，只是排在后面：应用刚上线时没几个人收藏，
+     * 空榜单对游客毫无用处，而"收藏少时按系统推荐补位"是一句能讲清楚的话。
+     * 排序依次是：收藏数 → 运营精选 → 精选排序位 → 内容排序位 → 名称，
+     * 因此同一份数据每次刷新顺序都一样，不会自己抖动。
+     *
+     * <p>聚合在数据库里做，排序在内存里做 —— 上架景点只有几十条，
+     * 换来的是一条读得懂、测得动的排序规则。
+     */
+    @Transactional(readOnly = true)
+    public List<TravelModels.PoiRank> popularPois(Integer limit) {
+        int safeLimit = limit == null || limit < 1
+            ? DEFAULT_POPULAR_LIMIT
+            : Math.min(limit, MAX_POPULAR_LIMIT);
+
+        Map<String, Long> counts = new HashMap<>();
+        for (Object[] row : favoriteRepository.countGroupedByPoi()) {
+            if (row.length >= 2 && row[0] instanceof String poiId && row[1] instanceof Long total) {
+                counts.put(poiId, total);
+            }
+        }
+
+        List<PoiEntity> ranked = new ArrayList<>(repository.findByPublishedTrueOrderBySortOrderAscNameAsc());
+        ranked.sort(Comparator
+            .comparingLong((PoiEntity poi) -> counts.getOrDefault(poi.getId(), 0L))
+            .reversed()
+            .thenComparing((PoiEntity poi) -> !poi.isHomeFeatured())
+            .thenComparingInt(PoiEntity::getFeaturedSortOrder)
+            .thenComparingInt(PoiEntity::getSortOrder)
+            .thenComparing(PoiEntity::getName));
+
+        return ranked.stream()
+            .limit(safeLimit)
+            .map(poi -> new TravelModels.PoiRank(toPublic(poi), counts.getOrDefault(poi.getId(), 0L)))
+            .toList();
     }
 
     /**
@@ -145,13 +213,13 @@ public class PoiContentService {
     public List<PoiModels.PoiView> adminList(String keyword) {
         List<PoiEntity> rows = repository.findAllByOrderBySortOrderAscNameAsc();
         if (keyword == null || keyword.isBlank()) {
-            return rows.stream().map(PoiContentService::toView).toList();
+            return rows.stream().map(this::toView).toList();
         }
         String needle = keyword.trim().toLowerCase(Locale.ROOT);
         return rows.stream()
             .filter(row -> contains(row.getName(), needle) || contains(row.getCity(), needle)
                 || contains(row.getCategory(), needle))
-            .map(PoiContentService::toView)
+            .map(this::toView)
             .toList();
     }
 
@@ -194,7 +262,65 @@ public class PoiContentService {
     @Transactional
     public void delete(String id) {
         PoiEntity entity = require(id);
+        // 先清图集：poi_media 没有数据库级外键（列表页会整表读，外键只会让
+        // 批量维护更别扭），所以删除景点时必须自己把子记录带走。
+        mediaRepository.deleteByPoiId(id);
         repository.delete(entity);
+    }
+
+    /** 首页推荐位的开关与排序。 */
+    @Transactional
+    public PoiModels.PoiView setFeatured(String id, PoiModels.FeaturedInput input) {
+        PoiEntity entity = require(id);
+        if (input.homeFeatured() != null) {
+            entity.setHomeFeatured(input.homeFeatured());
+        }
+        if (input.featuredSortOrder() != null) {
+            entity.setFeaturedSortOrder(input.featuredSortOrder());
+        }
+        return toView(repository.save(entity));
+    }
+
+    // ---------- 景区图集 ----------
+
+    @Transactional(readOnly = true)
+    public List<PoiModels.MediaView> listMedia(String poiId) {
+        require(poiId);
+        return mediaViews(poiId);
+    }
+
+    @Transactional
+    public PoiModels.MediaView addMedia(String poiId, PoiModels.MediaInput input) {
+        require(poiId);
+        PoiMediaEntity entity = new PoiMediaEntity();
+        entity.setPoiId(poiId);
+        applyMedia(entity, input);
+        if (input.sortOrder() == null) {
+            entity.setSortOrder(nextMediaSortOrder(poiId));
+        }
+        return toMediaView(mediaRepository.save(entity));
+    }
+
+    @Transactional
+    public PoiModels.MediaView updateMedia(String poiId, Long mediaId, PoiModels.MediaInput input) {
+        require(poiId);
+        PoiMediaEntity entity = mediaRepository.findById(mediaId)
+            .filter(row -> poiId.equals(row.getPoiId()))
+            .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "POI_MEDIA_NOT_FOUND", "图片不存在"));
+        applyMedia(entity, input);
+        if (input.sortOrder() != null) {
+            entity.setSortOrder(input.sortOrder());
+        }
+        return toMediaView(mediaRepository.save(entity));
+    }
+
+    @Transactional
+    public void deleteMedia(String poiId, Long mediaId) {
+        require(poiId);
+        PoiMediaEntity entity = mediaRepository.findById(mediaId)
+            .filter(row -> poiId.equals(row.getPoiId()))
+            .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "POI_MEDIA_NOT_FOUND", "图片不存在"));
+        mediaRepository.delete(entity);
     }
 
     @Transactional(readOnly = true)
@@ -220,6 +346,8 @@ public class PoiContentService {
         entity.setDuration(trim(input.duration()));
         entity.setSuitability(trimToNull(input.suitability()));
         entity.setWeatherTip(trimToNull(input.weatherTip()));
+        entity.setOpeningHours(trimToNull(input.openingHours()));
+        entity.setReservationNote(trimToNull(input.reservationNote()));
         entity.setDataStatus(input.dataStatus() == null || input.dataStatus().isBlank()
             ? DEFAULT_STATUS : input.dataStatus().trim());
         entity.setImageCredit(trimToNull(input.imageCredit()));
@@ -274,21 +402,60 @@ public class PoiContentService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private static TravelModels.Poi toPublic(PoiEntity entity) {
+    private void applyMedia(PoiMediaEntity entity, PoiModels.MediaInput input) {
+        entity.setImageUrl(trim(input.imageUrl()));
+        entity.setCaption(trimToNull(input.caption()));
+        entity.setImageCredit(trimToNull(input.imageCredit()));
+        entity.setSourceUrl(trimToNull(input.sourceUrl()));
+        entity.setPublished(!Boolean.FALSE.equals(input.published()));
+    }
+
+    private int nextMediaSortOrder(String poiId) {
+        return mediaRepository.findByPoiIdOrderBySortOrderAscIdAsc(poiId).stream()
+            .mapToInt(PoiMediaEntity::getSortOrder)
+            .max()
+            .orElse(0) + 10;
+    }
+
+    private static PoiModels.MediaView toMediaView(PoiMediaEntity entity) {
+        return new PoiModels.MediaView(entity.getId(), entity.getPoiId(), entity.getImageUrl(),
+            entity.getCaption(), entity.getImageCredit(), entity.getSourceUrl(),
+            entity.getSortOrder(), entity.isPublished());
+    }
+
+    private List<PoiModels.MediaView> mediaViews(String poiId) {
+        return mediaRepository.findByPoiIdOrderBySortOrderAscIdAsc(poiId).stream()
+            .map(PoiContentService::toMediaView)
+            .toList();
+    }
+
+    /** 详情页图集：只取上架的图，按运营排序。 */
+    private List<String> galleryUrls(String poiId) {
+        return mediaRepository.findByPoiIdAndPublishedTrueOrderBySortOrderAscIdAsc(poiId).stream()
+            .map(PoiMediaEntity::getImageUrl)
+            .filter(url -> url != null && !url.isBlank())
+            .toList();
+    }
+
+    private TravelModels.Poi toPublic(PoiEntity entity) {
         return new TravelModels.Poi(entity.getId(), entity.getName(), entity.getCity(), entity.getCategory(),
             entity.getImageUrl(), entity.getDescription(), entity.getTicketFrom(), entity.getDuration(),
             entity.getSuitability(), entity.getWeatherTip(), entity.getDataStatus(),
-            entity.getImageCredit(), entity.getSourceUrl(), verdictOf(entity).status());
+            entity.getImageCredit(), entity.getSourceUrl(), verdictOf(entity).status(),
+            entity.getOpeningHours(), entity.getReservationNote(), galleryUrls(entity.getId()));
     }
 
-    private static PoiModels.PoiView toView(PoiEntity entity) {
+    private PoiModels.PoiView toView(PoiEntity entity) {
         PoiImageAudit.Verdict verdict = verdictOf(entity);
         return new PoiModels.PoiView(entity.getId(), entity.getName(), entity.getCity(), entity.getCategory(),
             entity.getImageUrl(), entity.getDescription(), entity.getTicketFrom(), entity.getDuration(),
             entity.getSuitability(), entity.getWeatherTip(), entity.getDataStatus(), entity.getImageCredit(),
             entity.getSourceUrl(), entity.getLng(), entity.getLat(), entity.isPublished(),
             entity.getSortOrder(), entity.getCreatedAt(), entity.getUpdatedAt(),
-            verdict.status(), verdict.label(), verdict.gaps());
+            verdict.status(), verdict.label(), verdict.gaps(),
+            entity.getOpeningHours(), entity.getReservationNote(),
+            entity.isHomeFeatured(), entity.getFeaturedSortOrder(),
+            mediaViews(entity.getId()));
     }
 
     /**

@@ -33,6 +33,12 @@ const router = createRouter({
           meta: { title: '内容运营', crumb: 'Content Ops', nav: 'content' },
         },
         {
+          path: 'resources',
+          name: 'resources',
+          component: () => import('../views/AppResourcesView.vue'),
+          meta: { title: '应用资源', crumb: 'App Resources', nav: 'resources' },
+        },
+        {
           path: 'ai',
           name: 'ai',
           component: () => import('../views/AiRunsView.vue'),

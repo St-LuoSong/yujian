@@ -21,7 +21,10 @@ public final class PoiModels {
                           String weatherTip, String dataStatus, String imageCredit, String sourceUrl,
                           Double lng, Double lat,
                           boolean published, int sortOrder, Instant createdAt, Instant updatedAt,
-                          String imageStatus, String imageStatusLabel, List<String> imageGaps) {
+                          String imageStatus, String imageStatusLabel, List<String> imageGaps,
+                          String openingHours, String reservationNote,
+                          boolean homeFeatured, int featuredSortOrder,
+                          List<MediaView> gallery) {
     }
 
     public record PoiInput(@NotBlank(message = "请填写景点名称") String name,
@@ -39,7 +42,28 @@ public final class PoiModels {
                            Double lng,
                            Double lat,
                            Boolean published,
-                           Integer sortOrder) {
+                           Integer sortOrder,
+                           /** 开放时间，可空。留空时客户端显示"以景区公告为准"。 */
+                           String openingHours,
+                           /** 预约说明，可空。 */
+                           String reservationNote) {
+    }
+
+    /** 首页推荐位的开关与排序。和整体编辑分开，运营勾一下就能上/下首页。 */
+    public record FeaturedInput(Boolean homeFeatured, Integer featuredSortOrder) {
+    }
+
+    /** 图集里的一张图。 */
+    public record MediaView(Long id, String poiId, String imageUrl, String caption,
+                            String imageCredit, String sourceUrl, int sortOrder, boolean published) {
+    }
+
+    public record MediaInput(@NotBlank(message = "请先上传图片") String imageUrl,
+                             String caption,
+                             String imageCredit,
+                             String sourceUrl,
+                             Integer sortOrder,
+                             Boolean published) {
     }
 
     public record PublishInput(boolean published) {

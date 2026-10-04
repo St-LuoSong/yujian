@@ -43,6 +43,37 @@ export interface PoiView {
   imageStatusLabel: string
   /** 必须补齐的项；已登记时为空数组。 */
   imageGaps: string[]
+  /** 开放时间，可能为空；为空时界面显示"以景区公告为准"，不编造。 */
+  openingHours: string | null
+  /** 预约说明，可能为空。 */
+  reservationNote: string | null
+  /** 是否进入首页"热门推荐"。 */
+  homeFeatured: boolean
+  /** 首页推荐位排序，仅在 homeFeatured 为真时有意义。 */
+  featuredSortOrder: number
+  /** 详情页图集（不含封面）。 */
+  gallery: PoiMediaView[]
+}
+
+/** 景区图集里的一张图。 */
+export interface PoiMediaView {
+  id: number
+  poiId: string
+  imageUrl: string
+  caption: string | null
+  imageCredit: string | null
+  sourceUrl: string | null
+  sortOrder: number
+  published: boolean
+}
+
+export interface PoiMediaInput {
+  imageUrl: string
+  caption?: string | null
+  imageCredit?: string | null
+  sourceUrl?: string | null
+  sortOrder?: number
+  published?: boolean
 }
 
 export interface ImageUploadResult {
@@ -72,6 +103,92 @@ export interface PoiInput {
   lat: number | null
   published: boolean
   sortOrder: number
+  openingHours?: string | null
+  reservationNote?: string | null
+}
+
+/** 全局视觉资源槽。imageUrl 为空表示未配置，客户端退回 APK 内置占位图。 */
+export interface VisualResourceView {
+  slot: string
+  imageUrl: string | null
+  imageCredit: string | null
+  sourceUrl: string | null
+  enabled: boolean
+  updatedAt: string | null
+}
+
+export interface VisualResourceInput {
+  imageUrl?: string | null
+  imageCredit?: string | null
+  sourceUrl?: string | null
+  enabled?: boolean
+}
+
+/** 主题路线（示范走廊）。 */
+export interface ThemeRouteView {
+  id: string
+  title: string
+  subtitle: string
+  cities: string | null
+  duration: string | null
+  budget: string | null
+  coverUrl: string | null
+  highlights: string[]
+  planningPrompt: string | null
+  imageCredit: string | null
+  sourceUrl: string | null
+  published: boolean
+  sortOrder: number
+  updatedAt: string | null
+}
+
+export interface ThemeRouteInput {
+  title: string
+  subtitle: string
+  cities?: string | null
+  duration?: string | null
+  budget?: string | null
+  coverUrl?: string | null
+  highlights?: string[]
+  planningPrompt?: string | null
+  imageCredit?: string | null
+  sourceUrl?: string | null
+  published?: boolean
+  sortOrder?: number
+}
+
+/** 文化锦囊文章。 */
+export interface CultureArticleView {
+  id: string
+  title: string
+  summary: string | null
+  content: string
+  category: string
+  coverUrl: string | null
+  imageCredit: string | null
+  sourceUrl: string | null
+  published: boolean
+  sortOrder: number
+  createdAt: string | null
+  updatedAt: string | null
+  author: string | null
+  likeCount: number
+}
+
+export interface CultureArticleInput {
+  title: string
+  summary?: string | null
+  content: string
+  category: string
+  coverUrl?: string | null
+  imageCredit?: string | null
+  sourceUrl?: string | null
+  published?: boolean
+  sortOrder?: number
+  /** 署名；留空则客户端不显示作者。 */
+  author?: string | null
+  /** 展示用点赞数（内容自带的元数据，不是站内真实点赞）。 */
+  likeCount?: number
 }
 
 /**

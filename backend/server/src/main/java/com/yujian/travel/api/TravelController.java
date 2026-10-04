@@ -1,6 +1,7 @@
 package com.yujian.travel.api;
 
 import com.yujian.travel.common.ApiException;
+import com.yujian.travel.service.ContentLibraryService;
 import com.yujian.travel.service.PoiContentService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -21,15 +22,54 @@ import java.util.UUID;
 @RequestMapping("/api")
 public class TravelController {
     private final PoiContentService poiContentService;
+    private final ContentLibraryService contentLibraryService;
 
-    public TravelController(PoiContentService poiContentService) {
+    public TravelController(PoiContentService poiContentService,
+                            ContentLibraryService contentLibraryService) {
         this.poiContentService = poiContentService;
+        this.contentLibraryService = contentLibraryService;
     }
 
+    /**
+     * 首页聚合。
+     *
+     * 一次返回首屏需要的全部内容：横幅文案与图片、四条主题路线、精选景点、
+     * 文化锦囊预览。拆成多个接口会让首屏出现"图出来了、字还在转"的割裂感，
+     * 而这些数据本来就是同一屏的。
+     *
+     * corridors 与 headline/subline 保留旧名字，继续服务旧客户端。
+     */
     @GetMapping("/home")
     public TravelModels.HomeResponse home() {
-        return new TravelModels.HomeResponse(TravelCatalog.corridors(), poiContentService.publicPois(null),
-            "一句话，规划你的河南之旅", "从第一站到最后一程，把中原风物安排得刚刚好。");
+        return new TravelModels.HomeResponse(
+            contentLibraryService.legacyCorridors(),
+            contentLibraryService.publicThemeRoutes(),
+            poiContentService.featuredPois(),
+            contentLibraryService.publicCulturePreview(),
+            contentLibraryService.publicVisualResources(),
+            "河南，让旅行更简单",
+            "AI 智能规划 · 精准推荐 · 陪伴出行",
+            java.time.Instant.now().toString());
+    }
+
+    /** 主题路线：旧客户端读 /home，新客户端也可以在"精选路线"页单独翻页。 */
+    @GetMapping("/theme-routes")
+    public List<TravelModels.ThemeRoute> themeRoutes() {
+        return contentLibraryService.publicThemeRoutes();
+    }
+
+    /** 文化锦囊列表。category 为空即全部。 */
+    @GetMapping("/culture-articles")
+    public List<TravelModels.CultureArticleSummary> cultureArticles(
+        @RequestParam(required = false) String category) {
+        return contentLibraryService.publicCulture(category);
+    }
+
+    @GetMapping("/culture-articles/{id}")
+    public ResponseEntity<TravelModels.CultureArticle> cultureArticle(@PathVariable String id) {
+        return contentLibraryService.publicCultureArticle(id)
+            .map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/pois")
@@ -50,9 +90,23 @@ public class TravelController {
      */
     @GetMapping("/pois/page")
     public TravelModels.PoiPage poiPage(@RequestParam(required = false) String city,
+                                        @RequestParam(required = false) String category,
+                                        @RequestParam(required = false) String keyword,
                                         @RequestParam(required = false) Integer page,
                                         @RequestParam(required = false) Integer size) {
-        return poiContentService.publicPoiPage(city, page, size);
+        return poiContentService.publicPoiPage(city, category, keyword, page, size);
+    }
+
+    /**
+     * 收藏榜：被收藏最多的景点，默认前 10 条。
+     *
+     * 与 /pois 分开是有意的：这里要多做一次收藏聚合，而 /pois 是"整份目录"的
+     * 入口，不该为它多算一遍。路径是字面量，优先级高于 /pois/{id}，
+     * 不会把 "popular" 当成某个景点 id。
+     */
+    @GetMapping("/pois/popular")
+    public List<TravelModels.PoiRank> popularPois(@RequestParam(required = false) Integer limit) {
+        return poiContentService.popularPois(limit);
     }
 
     /**

@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API 21+ variant of the launch splash, kept identical to the base
-     resource so the window background resolves consistently on every
-     supported Android version. -->
+<!-- API 21+ variant of the launch splash, kept identical to the base resource so
+     the window background resolves consistently on every supported version. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/yujian_paper" />
+    <item android:drawable="@color/yujian_splash_bg" />
 
-    <!-- 与基础启动页保持一致，避免不同 API 版本出现两种首屏。 -->
     <item>
         <bitmap
-            android:gravity="center"
-            android:src="@drawable/splash_logo" />
+            android:gravity="fill"
+            android:src="@drawable/splash_poster" />
     </item>
 </layer-list>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 系统启动页的占位图标：全透明。
+
+     Android 12 以上强制显示"纯色底 + 居中图标"，画不了整幅海报。与其在正中间
+     放一个小图标（看起来就像加载图失效了），不如把图标撤掉，第一屏就是干净的
+     品牌青，紧接着 Flutter 第一帧把海报淡入。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <size
+        android:width="2dp"
+        android:height="2dp" />
+    <solid android:color="@android:color/transparent" />
+</shape>

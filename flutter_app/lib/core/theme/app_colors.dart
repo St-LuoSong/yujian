@@ -1,54 +1,59 @@
 import 'package:flutter/material.dart';
 
-/// v0.3 palette: 汝瓷天青 · 匣钵墨 · 窑变朱，落在温暖的纸面上。
+/// v0.4 palette: 现代中原文化 × 淡彩山河 × 轻量旅行工具。
 ///
-/// The v0.2 palette was cool and flat on purpose: it replaced a warm cream
-/// template. The problem was that a flat, hairline-only page reads as a
-/// wireframe, and everything ended up the same weight. v0.3 keeps the same
-/// Henan materials (Ru-ware celadon, kiln red) but puts them on a surface that
-/// can carry photography, with soft depth and one warm price accent.
+/// v0.3 已经用汝瓷天青替代了模板奶油色，但仍然偏灰：页面底色像一张纸，
+/// 卡片和纸面之间只靠一条发丝线分隔。v0.4 把底色换成淡青白（雾白），
+/// 把品牌青做深做稳，让山河照片有更干净的落点；麦穗金从"价格色"收回成
+/// 装饰色，价格改用对比度足够的深金 [amberInk]，小字号也不会糊在白色上。
 ///
-/// Full rationale: `docs/DESIGN_DIRECTION.md`.
+/// 名称保持 v0.3 的语义（ground/ink/celadon/...），只换数值：调用点遍布
+/// 全工程，改名会带来一次没有收益的大面积回归。
 abstract final class AppColors {
-  /// 纸面 — page ground. A soft neutral, deliberately not the warm cream
-  /// default and not the sterile grey of a dashboard.
-  static const Color ground = Color(0xFFF1F3EF);
+  /// 页面雾白 — page ground. 淡青白，让白色内容面板自然浮起来。
+  static const Color ground = Color(0xFFF4F8F6);
 
   /// 匣钵 — primary text and the single dark surface.
   static const Color ink = Color(0xFF16211F);
 
   /// 墨淡 — body copy on a light surface when pure ink is too loud.
-  static const Color inkSoft = Color(0xFF3B4744);
+  static const Color inkSoft = Color(0xFF3C4A46);
 
-  /// 天青 — brand and structure colour, taken from 汝瓷.
-  static const Color celadon = Color(0xFF2F6F68);
+  /// 品牌深青 — brand and structure colour.
+  static const Color celadon = Color(0xFF145D55);
 
-  /// 天青深 — the filled brand surface (hero, primary action).
+  /// 品牌青黛 — the filled brand surface (hero, primary action).
   static const Color celadonDeep = Color(0xFF1C4B46);
 
-  /// 天青淡 — rules, ticks, inactive states.
-  static const Color celadonPale = Color(0xFFCFE0DB);
+  /// 汝瓷浅青 — rules, ticks, tinted blocks, inactive states.
+  static const Color celadonPale = Color(0xFFE4F2EE);
 
   /// 开片灰 — secondary text and units.
-  static const Color crackle = Color(0xFF78867F);
+  static const Color crackle = Color(0xFF73817C);
 
   /// 窑变朱 — risk, and the current/next stop. Still rare on purpose.
-  static const Color kilnRed = Color(0xFFB23A22);
+  static const Color kilnRed = Color(0xFFC94D36);
 
-  /// 麦穗 — the price accent. One warm colour, used only for money.
-  static const Color amber = Color(0xFFB98A3C);
+  /// 麦穗金 — 收藏星标、餐食节点等装饰性金色。不要用小字号正文。
+  static const Color amber = Color(0xFFE8B45B);
+
+  /// 麦穗金·深 — 价格等需要读清楚的小字号金色文字。
+  ///
+  /// 麦穗金本身在白色上的对比度不足 2:1，直接拿去写"¥120 起"会看不清；
+  /// 这里保留金色色相、把明度压到可读区间。
+  static const Color amberInk = Color(0xFF8C6A1F);
 
   /// 陶土面 — warm tint used behind prices and season chips.
-  static const Color sandSurface = Color(0xFFF7F0E2);
+  static const Color sandSurface = Color(0xFFFBF3E3);
 
   /// Cards and sheets.
   static const Color surface = Color(0xFFFFFFFF);
 
   /// Cool tinted surface for informational blocks.
-  static const Color surfaceTint = Color(0xFFE8EFEC);
+  static const Color surfaceTint = Color(0xFFEDF5F2);
 
   /// Slightly darker tint, for pressed or nested blocks.
-  static const Color surfaceSunken = Color(0xFFDDE6E2);
+  static const Color surfaceSunken = Color(0xFFDEEBE6);
 
   /// Risk note block.
   static const Color riskSurface = Color(0xFFFBE9E4);
@@ -68,7 +73,7 @@ abstract final class AppColors {
   static const Color settled = Color(0xFF3F7A57);
 
   /// Hairline. Only for real separators, never as the main way to group.
-  static const Color hairline = Color(0xFFE1E6E1);
+  static const Color hairline = Color(0xFFDFE8E4);
 
   /// Soft drop shadow under a raised card. Low alpha, large blur: depth without
   /// a visible grey outline.
