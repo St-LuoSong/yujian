@@ -1,5 +1,6 @@
 server:
   port: ${PORT:8080}
+  forward-headers-strategy: framework
 spring:
   application:
     name: yujian-travel-server
@@ -8,8 +9,9 @@ spring:
   servlet:
     multipart:
       # 单文件与单请求上限；应用层还会按 app.media.max-size-mb 再校验一次。
-      max-file-size: ${MEDIA_MAX_FILE_SIZE:10MB}
-      max-request-size: ${MEDIA_MAX_REQUEST_SIZE:12MB}
+      # 全局上限同时覆盖图片与 APK；各模块仍会执行更严格的业务上限。
+      max-file-size: ${MEDIA_MAX_FILE_SIZE:320MB}
+      max-request-size: ${MEDIA_MAX_REQUEST_SIZE:322MB}
   datasource:
     url: jdbc:h2:file:./data/yujian;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
     driver-class-name: org.h2.Driver
@@ -24,6 +26,11 @@ spring:
         format_sql: true
         jdbc:
           time_zone: Asia/Shanghai
+  # Flyway 只在 prod（MySQL）档启用，见 application-prod.yml。
+  # dev/test 用的是本机 H2 文件库：那里的结构由 Hibernate 自己建，如果也让
+  # MySQL 方言的迁移脚本去跑一遍，就会多出一个随时会跟实体漂移的第二事实来源。
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
   mail:
     host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}
@@ -67,6 +74,16 @@ app:
     base-url: ${MEDIA_BASE_URL:}
     max-size-mb: ${MEDIA_MAX_SIZE_MB:8}
     max-dimension: ${MEDIA_MAX_DIMENSION:6000}
+  app-release:
+    storage-dir: ${APP_RELEASE_STORAGE_DIR:./data/releases}
+    expected-package-name: ${APP_RELEASE_EXPECTED_PACKAGE:com.yujian.travel}
+    allowed-certificate-sha256: ${APP_RELEASE_ALLOWED_CERT_SHA256:}
+    max-size-mb: ${APP_RELEASE_MAX_SIZE_MB:300}
+    # 版本跨度超过这个值就强制更新，见 AppProperties.AppRelease#forcedUpdateGap。
+    forced-update-gap: ${APP_RELEASE_FORCED_UPDATE_GAP:5}
+    # 老客户端（不带 channel 参数）在正式通道没有版本时回落到调试通道。
+    # 这是给 v0.4.0 及以前已经装出去的包留的过渡口子，用完应该关掉。
+    legacy-check-falls-back-to-debug: ${APP_RELEASE_LEGACY_DEBUG_FALLBACK:true}
   # 外部工具（天气 / 地图 / 铁路）的数据源。
   # 取到真实数据就用真实数据并如实标注；取不到则带原因降级到演示数据，
   # APK 的「依据」页与运营统计都能看到每一条的真实来源与状态。

@@ -10,18 +10,30 @@ import 'package:flutter/material.dart';
 /// [fallback] 是最后一道保险：万一这一页真的成了栈底（`canPop()` 为假），
 /// 用重建主导航壳层的方式退出，而不是让按钮点下去毫无反应。
 class AppBackButton extends StatelessWidget {
-  const AppBackButton({super.key, this.fallback, this.tooltip = '返回'});
+  const AppBackButton({
+    super.key,
+    this.fallback,
+    this.tooltip = '返回',
+    this.dark = false,
+  });
 
   /// 没有上一层可退时，用来重建导航壳层的页面构造器。为空时按钮只做 pop。
   final WidgetBuilder? fallback;
 
   final String tooltip;
 
+  /// 深色底（例如全屏看图）上改用白色图标。
+  final bool dark;
+
   @override
   Widget build(BuildContext context) => IconButton(
         onPressed: () => _leave(context),
         tooltip: tooltip,
-        icon: const Icon(Icons.arrow_back, size: 20),
+        icon: Icon(
+          Icons.arrow_back,
+          size: 20,
+          color: dark ? Colors.white : null,
+        ),
       );
 
   void _leave(BuildContext context) {

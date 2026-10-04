@@ -5,6 +5,7 @@ import com.yujian.travel.domain.UserAccount;
 import com.yujian.travel.domain.UserMessageEntity;
 import com.yujian.travel.repository.UserAccountRepository;
 import com.yujian.travel.repository.UserMessageRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,49 @@ public class MessageCenterService {
 
     public long unreadCount(UUID userId) {
         return messages.countByUserIdAndReadFalse(userId);
+    }
+
+    /**
+     * Writes a business event into the existing inbox.
+     *
+     * This deliberately does not send a push notification or collect a device
+     * token. The user sees the event the next time the already-existing
+     * message centre is opened, which keeps the first release privacy-light.
+     */
+    @Transactional
+    public MessageView publish(UUID userId, String type, String tag,
+                               String title, String body) {
+        UserAccount user = users.findById(userId)
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+                "AUTH_REQUIRED", "登录状态已失效"));
+        return view(messages.save(message(user, type, tag, title, body)));
+    }
+
+    /**
+     * 带去重键的发布：同一个用户 + 同一个键只会留下一条。
+     *
+     * 返回 null 表示这条消息之前已经发过了。做成"先查再写 + 唯一索引兜底"两层：
+     * 只靠查询的话，两个并发请求会各写一条；只靠唯一索引的话，第二个请求会抛
+     * 约束冲突，把一次正常的版本确认变成 500。
+     */
+    @Transactional
+    public MessageView publishOnce(UUID userId, String type, String tag,
+                                   String title, String body, String dedupeKey) {
+        if (dedupeKey != null && !dedupeKey.isBlank()
+            && messages.existsByUserIdAndDedupeKey(userId, dedupeKey)) {
+            return null;
+        }
+        UserAccount user = users.findById(userId)
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+                "AUTH_REQUIRED", "登录状态已失效"));
+        UserMessageEntity entity = message(user, type, tag, title, body);
+        entity.setDedupeKey(dedupeKey);
+        try {
+            return view(messages.save(entity));
+        } catch (DataIntegrityViolationException ignored) {
+            // 并发下另一个请求先写成功了：这一次本来就不需要再发一遍。
+            return null;
+        }
     }
 
     @Transactional

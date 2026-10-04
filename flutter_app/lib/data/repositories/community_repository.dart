@@ -23,7 +23,18 @@ class CommunityRepository {
   /// 一旦写进去，别人的手机就打不开这些图。
   CommunityPost _resolve(CommunityPost post) => post.copyWith(
         imageUrls: post.imageUrls.map(_config.resolveMediaUrl).toList(),
+        authorAvatarUrl: post.authorAvatarUrl == null
+            ? null
+            : _config.resolveMediaUrl(post.authorAvatarUrl!),
       );
+
+  /// 头像和配图走同一条规则：库里存 `/media/...`，显示前补成这台设备能访问的地址。
+  CommunityComment _resolveComment(CommunityComment comment) =>
+      comment.authorAvatarUrl == null || comment.authorAvatarUrl!.isEmpty
+          ? comment
+          : comment.copyWith(
+              authorAvatarUrl: _config.resolveMediaUrl(comment.authorAvatarUrl!),
+            );
 
   /// 把绝对地址还原成入库用的相对路径；只对本站 `/media/` 图片生效。
   static String storageImageUrl(String raw) {
@@ -133,12 +144,89 @@ class CommunityRepository {
     return _resolve(CommunityPost.fromJson(data));
   }
 
+  /// 收藏（书签）。与点赞是两个独立动作。
+  Future<CommunityPost> favorite(String id) async {
+    final data = await _client.postJsonObject('/community/posts/$id/favorite');
+    return _resolve(CommunityPost.fromJson(data));
+  }
+
+  Future<CommunityPost> unfavorite(String id) async {
+    final data = await _client.deleteJsonObject('/community/posts/$id/favorite');
+    return _resolve(CommunityPost.fromJson(data));
+  }
+
+  /// 我收藏的旅记。
+  Future<CommunityPage> fetchFavorites({int page = 1, int size = 20}) async {
+    final data = await _client.getJsonObject(
+      '/community/posts/favorites',
+      query: <String, dynamic>{'page': page, 'size': size},
+    );
+    return CommunityPage.fromJson(data).mapItems(_resolve);
+  }
+
   Future<void> report(String id, String reason) async {
     await _client.sendNoContent(
       () => _client.post<dynamic>(
         '/community/posts/$id/report',
         data: <String, Object?>{'reason': reason},
       ),
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 评论
+  // ------------------------------------------------------------------
+
+  Future<CommentPage> fetchComments(
+    String postId, {
+    int page = 1,
+    int size = 20,
+  }) async {
+    final data = await _client.getJsonObject(
+      '/community/posts/$postId/comments',
+      query: <String, dynamic>{'page': page, 'size': size},
+    );
+    return CommentPage.fromJson(data).mapItems(_resolveComment);
+  }
+
+  Future<CommunityComment> addComment(
+    String postId,
+    String content, {
+    String? parentId,
+  }) async {
+    final data = await _client.postJsonObject(
+      '/community/posts/$postId/comments',
+      body: <String, dynamic>{
+        'content': content,
+        'parentId': parentId,
+      },
+    );
+    return _resolveComment(CommunityComment.fromJson(data));
+  }
+
+  /// 给评论点赞 / 取消。服务端返回的是那条评论的最新状态。
+  ///
+  /// 注意返回值的 `replies` 一定是空的：接口只回这一条评论，调用方应该只取
+  /// `likeCount` 与 `likedByMe`，不要把整棵回复树用它替换掉。
+  Future<CommunityComment> likeComment(String commentId) async {
+    final data = await _client.postJsonObject('/community/comments/$commentId/like');
+    return _resolveComment(CommunityComment.fromJson(data));
+  }
+
+  Future<CommunityComment> unlikeComment(String commentId) async {
+    final data = await _client.deleteJsonObject('/community/comments/$commentId/like');
+    return _resolveComment(CommunityComment.fromJson(data));
+  }
+
+  /// 「我的」页的互动数据。
+  Future<CommunityStats> fetchMyStats() async {
+    final data = await _client.getJsonObject('/community/stats/me');
+    return CommunityStats.fromJson(data);
+  }
+
+  Future<void> deleteComment(String commentId) async {
+    await _client.sendNoContent(
+      () => _client.delete<dynamic>('/community/comments/$commentId'),
     );
   }
 

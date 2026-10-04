@@ -43,6 +43,14 @@ public class UserMessageEntity {
     @Column(nullable = false, length = 32)
     private String type;
 
+    /**
+     * 去重键。同一个用户 + 同一个键只会存在一条消息（数据库唯一索引兜底）。
+     *
+     * 为空表示这条消息不参与去重（例如首次登录时种入的产品说明）。
+     */
+    @Column(name = "dedupe_key", length = 120)
+    private String dedupeKey;
+
     @Column(nullable = false, length = 120)
     private String title;
 

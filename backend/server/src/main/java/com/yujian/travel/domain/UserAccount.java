@@ -33,6 +33,15 @@ public class UserAccount {
     @Column(name = "avatar_key", length = 32)
     private String avatarKey;
 
+    /**
+     * 用户自己上传的头像地址（服务端媒体库内的相对路径）。
+     *
+     * 和 {@link #avatarKey} 是两种来源：有值时优先用它，为空时回落到预设图案。
+     * 选择预设图案会把这一列清空，删除自定义头像则把它清空后回到预设/默认。
+     */
+    @Column(name = "avatar_url", length = 600)
+    private String avatarUrl;
+
     @Column(nullable = false, length = 100)
     private String passwordHash;
 

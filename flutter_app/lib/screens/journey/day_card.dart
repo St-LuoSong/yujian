@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/data_status_badge.dart';
+import '../../core/widgets/meta_flow.dart';
 import '../../core/widgets/photo_plate.dart';
 import '../../core/widgets/surface_card.dart';
 import '../../core/widgets/tag_pill.dart';
@@ -543,15 +544,11 @@ class _StopRow extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 8),
-                    Wrap(
+                    MetaFlow(
                       spacing: 6,
-                      runSpacing: 6,
                       children: <Widget>[
                         TagPill(stop.source, dense: true),
-                        DataStatusBadge(
-                          status: stop.dataStatus,
-                          dense: true,
-                        ),
+                        DataStatusBadge(status: stop.dataStatus, dense: true),
                       ],
                     ),
                   ],

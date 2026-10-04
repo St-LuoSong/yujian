@@ -8,6 +8,7 @@ import com.yujian.travel.repository.UserAccountRepository;
 import com.yujian.travel.security.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,8 +26,9 @@ class AuthServiceAccountTest {
     private final RefreshTokenRepository refreshTokens = mock(RefreshTokenRepository.class);
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
     private final AccountDeletionService deletion = mock(AccountDeletionService.class);
+    private final MediaStorageService mediaStorage = mock(MediaStorageService.class);
     private final AuthService service =
-        new AuthService(users, refreshTokens, encoder, mock(JwtService.class), deletion);
+        new AuthService(users, refreshTokens, encoder, mock(JwtService.class), deletion, mediaStorage);
 
     @Test
     void profileUpdateKeepsNicknameAndPresetAvatar() {
@@ -71,6 +73,39 @@ class AuthServiceAccountTest {
         service.deleteAccount(userId, "secret-123");
 
         verify(deletion).delete(userId);
+    }
+
+    @Test
+    void avatarUploadStoresTheRelativeUrlAndDropsThePresetKey() {
+        UUID userId = UUID.randomUUID();
+        UserAccount user = user(userId, "hash");
+        when(users.findById(userId)).thenReturn(Optional.of(user));
+        when(users.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mediaStorage.storeCommunityImage(any()))
+            .thenReturn(new MediaStorageService.StoredImage("avatar-1.jpg", "jpg", 2048L, 200, 200));
+
+        AuthModels.UserSummary summary = service.updateAvatar(userId, mock(MultipartFile.class));
+
+        // 存的是服务端相对路径：把上传时那个主机名写进库里，换域名之后所有历史头像都会失效。
+        assertThat(summary.avatarUrl()).isEqualTo("/media/avatar-1.jpg");
+        assertThat(summary.avatarKey()).isNull();
+    }
+
+    @Test
+    void switchingToAPresetAvatarDeletesTheUploadedFile() {
+        UUID userId = UUID.randomUUID();
+        UserAccount user = user(userId, "hash");
+        user.setAvatarUrl("/media/avatar-1.jpg");
+        user.setAvatarKey(null);
+        when(users.findById(userId)).thenReturn(Optional.of(user));
+        when(users.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthModels.UserSummary summary = service.updateProfile(userId, "河洛旅人", "kiln");
+
+        assertThat(summary.avatarKey()).isEqualTo("kiln");
+        assertThat(summary.avatarUrl()).isNull();
+        // 换回预设图案后旧文件不该继续占着磁盘。
+        verify(mediaStorage).delete("avatar-1.jpg");
     }
 
     private UserAccount user(UUID id, String passwordHash) {

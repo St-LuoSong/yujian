@@ -58,4 +58,23 @@ public class AdminCommunityController {
             "社区举报处理为：" + result.status());
         return result;
     }
+
+    /** 一篇旅记下的全部评论，含已隐藏的。 */
+    @GetMapping("/posts/{id}/comments")
+    public CommunityModels.CommentPage comments(
+        @PathVariable UUID id,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "50") int size) {
+        return communityService.allComments(id, page, size);
+    }
+
+    @PatchMapping("/comments/{id}")
+    public CommunityModels.CommentView moderateComment(
+        @PathVariable UUID id,
+        @Valid @RequestBody CommunityModels.CommentModerationRequest request) {
+        CommunityModels.CommentView result = communityService.moderateComment(id, request.status());
+        operationLog.record("COMMUNITY_COMMENT_MODERATE", id.toString(),
+            "社区评论处理为：" + request.status());
+        return result;
+    }
 }

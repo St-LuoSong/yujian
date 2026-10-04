@@ -16,10 +16,19 @@ plugins {
 //     keyAlias=...
 //     keyPassword=...
 //
-// Without that file the release build falls back to the debug signing key so
-// that `flutter build apk --release` still yields an installable demo artefact.
+// Release builds intentionally do not fall back to the debug certificate:
+// the backend trusts a certificate allow-list, so an ambiguously signed APK
+// must fail at build time rather than reach the upload screen.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
+val requestsRelease = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+if (requestsRelease && !hasReleaseKeystore) {
+    throw GradleException(
+        "Release signing is not configured. Create android/key.properties and the release keystore."
+    )
+}
 val keystoreProperties = Properties().apply {
     if (hasReleaseKeystore) {
         keystorePropertiesFile.inputStream().use { load(it) }
@@ -58,11 +67,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            if (hasReleaseKeystore) signingConfig = signingConfigs.getByName("release")
         }
     }
 }

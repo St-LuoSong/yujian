@@ -23,6 +23,9 @@
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-mail</artifactId></dependency>
+        <!-- APK metadata is parsed only after Android's official verifier has accepted the file. -->
+        <dependency><groupId>com.android.tools.build</groupId><artifactId>apksig</artifactId><version>8.7.3</version></dependency>
+        <dependency><groupId>net.dongliu</groupId><artifactId>apk-parser</artifactId><version>2.6.10</version></dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
@@ -35,11 +38,29 @@
         </dependency>
         <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>runtime</scope></dependency>
         <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><scope>runtime</scope></dependency>
+        <!--
+            生产库（MySQL）的结构归 Flyway 管：Hibernate 的 ddl-auto 在过去两年里
+            已经两次把列建成了它以为对的类型（prompt_version.system_prompt 变成
+            TINYTEXT，长提示词一写就 500）。版本化的迁移脚本让"这次上线改了哪几
+            列"变成一条可回看的记录，而不是 JPA 启动时的副作用。
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <!-- MySQL 8 的方言支持在 Flyway 10 里被拆成独立模块。 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-api</artifactId><version>0.12.6</version></dependency>
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.12.6</version><scope>runtime</scope></dependency>
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.12.6</version><scope>runtime</scope></dependency>
         <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><optional>true</optional></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     </dependencies>
+    <repositories>
+        <repository><id>google</id><url>https://maven.google.com</url></repository>
+    </repositories>
     <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
 </project>

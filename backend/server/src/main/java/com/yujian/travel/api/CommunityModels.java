@@ -72,6 +72,7 @@ public final class CommunityModels {
         UUID id,
         String authorName,
         String authorAvatarKey,
+        String authorAvatarUrl,
         UUID tripPlanId,
         String title,
         String content,
@@ -81,8 +82,11 @@ public final class CommunityModels {
         String status,
         List<String> imageUrls,
         long likeCount,
+        long favoriteCount,
+        long commentCount,
         long viewCount,
         boolean likedByMe,
+        boolean favoritedByMe,
         Instant createdAt,
         Instant publishedAt,
         String moderationNote
@@ -105,5 +109,62 @@ public final class CommunityModels {
     }
 
     public record ReportPage(List<ReportView> items, int page, int size, long total, boolean hasMore) {
+    }
+
+    public record CreateCommentRequest(
+        @NotBlank(message = "评论内容不能为空")
+        @Size(max = 500, message = "评论不能超过 500 个字符")
+        String content,
+        /** 为空是顶层评论；非空表示回复某条顶层评论。 */
+        UUID parentId
+    ) {
+    }
+
+    /**
+     * 一条评论。
+     *
+     * [mine] 由服务端判定，而不是让客户端拿自己的用户名去比对 —— 用户名可能
+     * 被管理员改过，而且客户端也不该知道"删除按钮该不该出现"这件事的全部条件。
+     *
+     * [replies] 只有顶层评论会带内容；回复自身的这一项恒为空列表，避免客户端
+     * 递归渲染出一棵它没法收尾的树。
+     */
+    public record CommentView(
+        UUID id,
+        UUID postId,
+        UUID parentId,
+        String authorName,
+        String authorAvatarKey,
+        String authorAvatarUrl,
+        String content,
+        String status,
+        long likeCount,
+        boolean likedByMe,
+        boolean mine,
+        Instant createdAt,
+        List<CommentView> replies
+    ) {
+    }
+
+    public record CommentPage(List<CommentView> items, int page, int size, long total, boolean hasMore) {
+    }
+
+    /**
+     * 「我的」页的互动数据。
+     *
+     * 每一项都只统计"别人对我"的动作：自己给自己的旅记点赞、给自己的评论点赞
+     * 都不该出现在"我获得的"里，否则这块数字就退化成"我点过多少下"。
+     */
+    public record CommunityStats(
+        long postLikes,
+        long commentLikes,
+        long favorites,
+        long comments
+    ) {
+    }
+
+    public record CommentModerationRequest(
+        @NotBlank(message = "请选择处理结果") String status
+    ) {
     }
 }

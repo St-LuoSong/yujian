@@ -1,6 +1,8 @@
 import { api } from './http'
 import type {
   AuthResponse,
+  CommunityCommentPage,
+  CommunityCommentView,
   CommunityPostPage,
   CommunityPostView,
   CommunityReportPage,
@@ -18,7 +20,10 @@ import type {
   PromptVersion,
   PromptVersionInput,
   ProviderReport,
+  SecurityLimitsView,
   ToolHealth,
+  AppReleaseView,
+  PublishAppReleaseInput,
 } from './types'
 
 export const authApi = {
@@ -104,6 +109,17 @@ export const communityAdminApi = {
       '/admin/community/reports/' + encodeURIComponent(id),
       { status, note },
     ),
+  /** 一篇旅记下的全部评论，含已隐藏的；回复挂在各自的父评论下。 */
+  comments: (postId: string, page = 1, size = 50) =>
+    api.get<CommunityCommentPage>(
+      '/admin/community/posts/' + encodeURIComponent(postId) + '/comments',
+      { query: { page, size } },
+    ),
+  moderateComment: (id: string, status: 'ACTIVE' | 'HIDDEN') =>
+    api.patch<CommunityCommentView>(
+      '/admin/community/comments/' + encodeURIComponent(id),
+      { status },
+    ),
 }
 
 export const feedbackApi = {
@@ -121,4 +137,40 @@ export const catalogApi = {
     '/home',
     { silentAuth: true },
   ),
+}
+
+/** 安全与限流：读写都在同一个接口上，改完直接回最新的一份视图。 */
+export const securityApi = {
+  limits: () => api.get<SecurityLimitsView>('/admin/security/limits'),
+  update: (values: Record<string, number>) =>
+    api.put<SecurityLimitsView>('/admin/security/limits', { values }),
+  reset: () => api.patch<SecurityLimitsView>('/admin/security/limits/reset'),
+}
+
+export const appReleaseApi = {
+  list: () => api.get<AppReleaseView[]>('/admin/app-releases'),
+  /**
+   * 上传安装包。
+   *
+   * channel 走查询参数而不是表单字段：服务端要在校验之前就知道该不该放行
+   * debuggable APK，而 multipart 的表单字段要读完整个文件才能拿到。
+   */
+  upload: (
+    file: File,
+    channel: 'RELEASE' | 'DEBUG',
+    onProgress?: (percent: number) => void,
+  ) =>
+    api.upload<AppReleaseView>(
+      '/admin/app-releases?channel=' + encodeURIComponent(channel),
+      file,
+      'file',
+      onProgress,
+    ),
+  publish: (id: string, input: PublishAppReleaseInput) =>
+    api.post<AppReleaseView>('/admin/app-releases/' + encodeURIComponent(id) + '/publish', input),
+  disable: (id: string) =>
+    api.patch<AppReleaseView>('/admin/app-releases/' + encodeURIComponent(id) + '/disable'),
+  /** 把停用/被替代的版本重新放回公开通道。只能往上恢复，服务端会拦住回退。 */
+  restore: (id: string) =>
+    api.patch<AppReleaseView>('/admin/app-releases/' + encodeURIComponent(id) + '/restore'),
 }

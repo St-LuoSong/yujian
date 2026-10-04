@@ -17,4 +17,6 @@ public interface UserMessageRepository extends JpaRepository<UserMessageEntity, 
     long countByUserIdAndReadFalse(UUID userId);
 
     boolean existsByUserId(UUID userId);
+
+    boolean existsByUserIdAndDedupeKey(UUID userId, String dedupeKey);
 }

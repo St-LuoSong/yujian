@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/providers.dart';
 import '../app/session_providers.dart';
 import '../core/formatters/chinese_date.dart';
+import '../core/icons/app_icons.dart';
 import '../core/network/api_failure.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
@@ -877,9 +878,10 @@ class DestinationDetail extends ConsumerWidget {
               IconButton(
                 onPressed: () => _toggleFavorite(context, ref),
                 tooltip: isFavorite ? '取消收藏' : '收藏',
-                icon: Icon(
-                  isFavorite ? Icons.star : Icons.star_border,
-                  color: isFavorite ? AppColors.amber : null,
+                icon: AppIcon(
+                  AppIcons.favorite(selected: isFavorite),
+                  size: 22,
+                  color: isFavorite ? AppColors.amber : AppColors.onInk,
                 ),
               ),
             ],

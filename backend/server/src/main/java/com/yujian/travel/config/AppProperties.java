@@ -20,6 +20,7 @@ public class AppProperties {
     private final Llm llm = new Llm();
     private final Share share = new Share();
     private final Media media = new Media();
+    private final AppRelease appRelease = new AppRelease();
     private final Tools tools = new Tools();
     private final Admin admin = new Admin();
 
@@ -122,6 +123,41 @@ public class AppProperties {
 
         /** 单个方向的像素上限，用于拒绝解压后过大的图片。 */
         private int maxDimension = 6000;
+    }
+
+    /** Trusted Android release channel. APK files are never served from /media. */
+    @Getter
+    @Setter
+    public static class AppRelease {
+        private String storageDir = "./data/releases";
+        private String expectedPackageName = "com.yujian.travel";
+        private List<String> allowedCertificateSha256 = List.of();
+        private long maxSizeMb = 300;
+
+        /**
+         * 允许落后的最大版本跨度。
+         *
+         * 超过这个跨度就不再问用户"要不要升级"，而是直接强制更新。理由很实际：
+         * 落后十几个版本的用户手上那份 APK，接口契约、数据状态语义甚至登录流程
+         * 都可能跟服务端对不上了，让他继续用下去只会不断地"报错—重启—再报错"。
+         *
+         * 5 是给比赛演示用的默认值：既不会因为一次小改动就强制所有人升级，
+         * 又能在演示"版本差过大"这条规则时真的触发。
+         */
+        private int forcedUpdateGap = 5;
+
+        /**
+         * 老客户端的版本检查是否允许回落到调试通道。
+         *
+         * v0.4.0 及以前的客户端根本不知道"通道"这回事，请求里不带 channel。
+         * 它们只能被当成正式通道查询，于是永远看不到只发布了调试包的新版本 ——
+         * 用户手上那份 APK 就被锁死了，只能手动重装。
+         *
+         * 打开这个开关后：没带 channel 的请求先查正式通道，正式通道没有已发布版本
+         * 时才回落到调试通道。等所有在用的客户端都升级到会带 channel 的版本之后，
+         * 应该把它关掉。
+         */
+        private boolean legacyCheckFallsBackToDebug = true;
     }
 
     /**

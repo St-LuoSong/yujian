@@ -5,10 +5,10 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/yujian_paper" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- 与基础启动页保持一致，避免不同 API 版本出现两种首屏。 -->
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/splash_logo" />
+    </item>
 </layer-list>

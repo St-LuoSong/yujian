@@ -197,6 +197,18 @@ button{font:inherit;color:inherit}
   background:var(--glaze-sunken)}
 @media (max-width:600px){.moderation-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+/* 评论区：管理员要在一屏里看清"谁说了什么、被藏了没有"，所以每条都摊开
+   显示正文，不做折叠 —— 折叠在这里只会让审核多两次点击。 */
+.moderation-comments{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);
+  background:var(--glaze-sunken)}
+.moderation-comments-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.moderation-comment{display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:var(--surface, #fff);
+  border:1px solid var(--line)}
+.moderation-comment-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.moderation-comment-head .btn{margin-left:auto}
+.moderation-comment-body{margin:0;font-size:13px;line-height:1.65;color:var(--ink-soft);overflow-wrap:anywhere}
+.moderation-comment-reply{margin-left:18px;border-left:3px solid var(--celadon, #2f6f68)}
+
 @media (max-width:1100px){
   .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .grid-2{grid-template-columns:minmax(0,1fr)}

@@ -1,13 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app/providers.dart';
 import '../app/session_providers.dart';
+import '../core/icons/app_icons.dart';
 import '../core/network/api_failure.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/app_typography.dart';
 import '../core/widgets/surface_card.dart';
+import '../core/widgets/user_avatar.dart';
 
 const List<_AvatarOption> _avatarOptions = <_AvatarOption>[
   _AvatarOption('celadon', '山河', Icons.landscape_outlined),
@@ -17,7 +22,10 @@ const List<_AvatarOption> _avatarOptions = <_AvatarOption>[
   _AvatarOption('ink', '灵感', Icons.auto_awesome_outlined),
 ];
 
-/// 编辑昵称与预设头像。头像只保存预设键，不上传照片，避免公开用户图片。
+/// 编辑昵称与头像。
+///
+/// 头像有两条路：预设图案（只存一个键）与自定义照片（上传到服务端媒体库，
+/// 存储时重新编码并去掉 EXIF，所以不会把拍摄位置一起公开出去）。
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -27,8 +35,11 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late final TextEditingController _nickname;
+  final ImagePicker _picker = ImagePicker();
   String? _avatarKey;
+  String? _avatarUrl;
   bool _saving = false;
+  bool _avatarBusy = false;
   String? _error;
 
   @override
@@ -37,6 +48,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final user = ref.read(sessionProvider).valueOrNull;
     _nickname = TextEditingController(text: user?.nickname ?? '');
     _avatarKey = user?.avatarKey;
+    _avatarUrl = _resolveAvatar(user?.avatarUrl);
+  }
+
+  /// 服务端存的是 /media/... 相对路径，预览前补成这台设备能访问的地址。
+  String? _resolveAvatar(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+    return ref.read(appConfigProvider).resolveMediaUrl(raw);
   }
 
   @override
@@ -84,35 +104,106 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     color: AppColors.ink,
                   ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  '使用预设图案，不上传照片，避免把个人照片公开到图片地址。',
-                  style: TextStyle(
-                    fontSize: AppTypography.caption,
-                    color: AppColors.crackle,
-                    height: 1.5,
-                  ),
-                ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
+                // 照片与预设图案是两种来源，同一时刻只呈现一种选择方式：
+                // 同时摆着"选预设"和"换照片"，用户点完两个会得到什么就说不清了。
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: <Widget>[
-                    _AvatarChoice(
-                      label: '首字',
-                      icon: null,
-                      selected: _avatarKey == null,
-                      onTap: () => setState(() => _avatarKey = null),
+                    UserAvatar(
+                      name: _nickname.text.trim().isEmpty
+                          ? '我'
+                          : _nickname.text.trim(),
+                      imageUrl: _avatarUrl,
+                      avatarKey: _avatarKey,
+                      size: 64,
+                      borderColor: AppColors.hairline,
                     ),
-                    for (final option in _avatarOptions)
-                      _AvatarChoice(
-                        label: option.label,
-                        icon: option.icon,
-                        selected: _avatarKey == option.key,
-                        onTap: () => setState(() => _avatarKey = option.key),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            _avatarUrl == null
+                                ? '当前使用预设图案或用户名首字。'
+                                : '当前使用你上传的照片。',
+                            style: const TextStyle(
+                              fontSize: AppTypography.caption,
+                              color: AppColors.crackle,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: <Widget>[
+                              OutlinedButton.icon(
+                                onPressed: _avatarBusy ? null : _pickAvatar,
+                                icon: const AppIcon(
+                                  AppIcons.upload,
+                                  size: 16,
+                                  color: AppColors.celadonDeep,
+                                ),
+                                label: Text(
+                                  _avatarBusy
+                                      ? '上传中…'
+                                      : (_avatarUrl == null ? '上传照片' : '更换照片'),
+                                ),
+                              ),
+                              if (_avatarUrl != null)
+                                TextButton(
+                                  onPressed: _avatarBusy ? null : _removeAvatar,
+                                  child: const Text('移除照片'),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
+                if (_avatarUrl != null) ...<Widget>[
+                  const SizedBox(height: 10),
+                  const Text(
+                    '照片会先重新编码并去掉位置信息，再作为头像公开；移除后回到预设图案。',
+                    style: TextStyle(
+                      fontSize: AppTypography.caption,
+                      color: AppColors.crackle,
+                      height: 1.5,
+                    ),
+                  ),
+                ] else ...<Widget>[
+                  const SizedBox(height: 16),
+                  const Text(
+                    '或选择一个预设图案',
+                    style: TextStyle(
+                      fontSize: AppTypography.caption,
+                      color: AppColors.crackle,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: <Widget>[
+                      _AvatarChoice(
+                        label: '首字',
+                        icon: null,
+                        selected: _avatarKey == null,
+                        onTap: () => setState(() => _avatarKey = null),
+                      ),
+                      for (final option in _avatarOptions)
+                        _AvatarChoice(
+                          label: option.label,
+                          icon: option.icon,
+                          selected: _avatarKey == option.key,
+                          onTap: () => setState(() => _avatarKey = option.key),
+                        ),
+                    ],
+                  ),
+                ],
                 if (_error != null) ...<Widget>[
                   const SizedBox(height: 16),
                   Text(
@@ -138,6 +229,85 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ],
       ),
     );
+  }
+
+  /// 选一张照片并立刻上传。
+  ///
+  /// 与保存昵称分开：这一条会真的改变服务端上的头像文件，上传成功就已经生效了。
+  /// 如果等"保存个人信息"再传，用户在这一页停留的每一秒都在赌网络。
+  Future<void> _pickAvatar() async {
+    if (_avatarBusy) return;
+    final XFile? picked;
+    try {
+      picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 88,
+      );
+    } on Object {
+      if (mounted) setState(() => _error = '无法打开相册，请检查系统权限。');
+      return;
+    }
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _avatarBusy = true;
+      _error = null;
+    });
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    try {
+      final user =
+          await ref.read(sessionProvider.notifier).uploadAvatar(File(picked.path));
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = _resolveAvatar(user.avatarUrl);
+        // 上传会顶掉预设图案，两边的本地状态必须一起更新，否则预览和保存
+        // 送出去的值会不一致。
+        _avatarKey = user.avatarKey;
+        _avatarBusy = false;
+      });
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('头像已更新。')));
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _avatarBusy = false;
+        _error = failure.message;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _avatarBusy = false;
+        _error = '头像上传失败，请稍后重试。';
+      });
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    if (_avatarBusy) return;
+    setState(() {
+      _avatarBusy = true;
+      _error = null;
+    });
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    try {
+      final user = await ref.read(sessionProvider.notifier).removeAvatar();
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = _resolveAvatar(user.avatarUrl);
+        _avatarKey = user.avatarKey;
+        _avatarBusy = false;
+      });
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('已移除自定义头像。')));
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _avatarBusy = false;
+        _error = failure.message;
+      });
+    }
   }
 
   Future<void> _save() async {

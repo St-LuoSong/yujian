@@ -18,7 +18,9 @@ const navItems = [
   { key: 'mock', index: '06', label: 'Mock 数据', to: '/mock' },
   { key: 'community', index: '07', label: '社区审核', to: '/community' },
   { key: 'feedback', index: '08', label: '用户反馈', to: '/feedback' },
-  { key: 'logs', index: '09', label: '操作日志', to: '/logs' },
+  { key: 'releases', index: '09', label: '应用发布', to: '/releases' },
+  { key: 'logs', index: '10', label: '操作日志', to: '/logs' },
+  { key: 'security', index: '11', label: '安全与限流', to: '/security' },
 ]
 
 const activeNav = computed(() => (route.meta.nav as string) ?? 'overview')

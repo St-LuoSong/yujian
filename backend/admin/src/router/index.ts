@@ -63,10 +63,22 @@ const router = createRouter({
           meta: { title: '用户反馈', crumb: 'Feedback', nav: 'feedback' },
         },
         {
+          path: 'releases',
+          name: 'releases',
+          component: () => import('../views/AppReleasesView.vue'),
+          meta: { title: '应用发布', crumb: 'App Releases', nav: 'releases' },
+        },
+        {
           path: 'logs',
           name: 'logs',
           component: () => import('../views/LogsView.vue'),
           meta: { title: '操作日志', crumb: 'Audit', nav: 'logs' },
+        },
+        {
+          path: 'security',
+          name: 'security',
+          component: () => import('../views/SecurityView.vue'),
+          meta: { title: '安全与限流', crumb: 'Limits', nav: 'security' },
         },
       ],
     },

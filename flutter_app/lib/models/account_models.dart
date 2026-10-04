@@ -10,6 +10,7 @@ class UserProfile {
     required this.roles,
     this.nickname,
     this.avatarKey,
+    this.avatarUrl,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -18,6 +19,7 @@ class UserProfile {
         nickname: json['nickname']?.toString(),
         email: _text(json['email']),
         avatarKey: json['avatarKey']?.toString(),
+        avatarUrl: json['avatarUrl']?.toString(),
         emailVerified: json['emailVerified'] == true,
         roles: _textList(json['roles']),
       );
@@ -25,6 +27,12 @@ class UserProfile {
   final String id, username, email;
   final String? nickname;
   final String? avatarKey;
+
+  /// 自定义头像的服务端相对路径（`/media/xxx.jpg`）。
+  ///
+  /// 与 [avatarKey] 是两种来源：这个有值时优先显示它，为空才回落到预设图案。
+  /// 存相对路径而不是完整 URL，换域名后历史头像才不会集体失效。
+  final String? avatarUrl;
 
   String get displayName =>
       nickname == null || nickname!.trim().isEmpty ? username : nickname!;

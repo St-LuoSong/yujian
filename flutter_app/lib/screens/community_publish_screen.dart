@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app/providers.dart';
+import '../core/icons/app_icons.dart';
 import '../core/network/api_failure.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
@@ -48,10 +49,14 @@ class _CommunityPublishScreenState
   List<TripSummary> _trips = <TripSummary>[];
   TripSummary? _selectedTrip;
   final List<String> _imageUrls = <String>[];
+
   /// 上传中是一个明确的是/否状态；进度单独计数，避免"永不归零"的布尔漂移。
   bool _uploading = false;
   int _uploadProcessed = 0;
   int _uploadTotal = 0;
+
+  /// 上传失败的图片连同原文件一起留在编辑页里，用户点那一张就能重试。
+  final List<_FailedUpload> _failedUploads = <_FailedUpload>[];
   bool _loadingTrips = true;
   bool _submitting = false;
   String _visibility = 'PUBLIC';
@@ -123,7 +128,10 @@ class _CommunityPublishScreenState
   }
 
   Future<void> _pickImages() async {
-    if (_uploading || _imageUrls.length >= _maxImages) return;
+    // 失败的图片仍然占着名额：否则用户可以连着挑 9 张、再挑 9 张，
+    // 最后摆出一屏 18 张谁也没见过的图。
+    final int used = _imageUrls.length + _failedUploads.length;
+    if (_uploading || used >= _maxImages) return;
 
     final List<XFile> picked;
     try {
@@ -134,7 +142,7 @@ class _CommunityPublishScreenState
     }
     if (picked.isEmpty || !mounted) return;
 
-    final int remaining = _maxImages - _imageUrls.length;
+    final int remaining = _maxImages - used;
     final List<XFile> selected = picked.take(remaining).toList();
     setState(() {
       _error = null;
@@ -143,23 +151,34 @@ class _CommunityPublishScreenState
       _uploadTotal = selected.length;
     });
 
-    final List<String> failed = <String>[];
     try {
       for (final XFile image in selected) {
         try {
           final String url =
               await _communityRepository.uploadImage(File(image.path));
           if (url.isEmpty) {
-            failed.add(_shortName(image.name));
+            if (mounted) {
+              setState(() => _failedUploads.add(
+                    _FailedUpload(file: image, message: '服务端没有返回图片地址'),
+                  ));
+            }
             continue;
           }
           if (mounted) {
             setState(() => _imageUrls.add(url));
           }
         } on ApiFailure catch (failure) {
-          failed.add('${_shortName(image.name)}：${failure.message}');
+          if (mounted) {
+            setState(() => _failedUploads.add(
+                  _FailedUpload(file: image, message: failure.message),
+                ));
+          }
         } on Object {
-          failed.add('${_shortName(image.name)}：上传失败');
+          if (mounted) {
+            setState(() => _failedUploads.add(
+                  _FailedUpload(file: image, message: '上传失败'),
+                ));
+          }
         } finally {
           // 成功和失败都要推进进度，否则进度条会停在中途。
           if (mounted) setState(() => _uploadProcessed++);
@@ -170,18 +189,66 @@ class _CommunityPublishScreenState
       if (mounted) {
         setState(() {
           _uploading = false;
-          if (failed.isNotEmpty) {
-            _error = failed.length == 1
-                ? '${failed.first}。其他图片已经保存，可以重试这一张。'
-                : '有 ${failed.length} 张图片没有上传成功：${failed.first}';
-          }
+          _error = _failedUploadFeedback;
         });
       }
     }
   }
 
-  static String _shortName(String value) =>
-      value.length <= 16 ? value : '${value.substring(0, 16)}…';
+  /// 上传失败时给用户的一句汇总。具体原因挂在每一张图上。
+  String? get _failedUploadFeedback {
+    final int count = _failedUploads.length;
+    if (count == 0) {
+      return null;
+    }
+    return count == 1
+        ? '有 1 张图片没有上传成功，点图片上的「重试」即可，其他图片已经保存。'
+        : '有 $count 张图片没有上传成功，逐张点「重试」即可，其他图片已经保存。';
+  }
+
+  /// 只重传一张失败的图片 —— 这是"上传失败"的正确粒度。
+  Future<void> _retryUpload(_FailedUpload entry) async {
+    if (entry.retrying || _uploading) {
+      return;
+    }
+    setState(() {
+      entry.retrying = true;
+      _error = null;
+    });
+    try {
+      final String url =
+          await _communityRepository.uploadImage(File(entry.file.path));
+      if (!mounted) return;
+      setState(() {
+        if (url.isEmpty) {
+          entry.message = '服务端没有返回图片地址';
+        } else {
+          _failedUploads.remove(entry);
+          _imageUrls.add(url);
+        }
+      });
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() => entry.message = failure.message);
+    } on Object {
+      if (!mounted) return;
+      setState(() => entry.message = '上传失败');
+    } finally {
+      if (mounted) {
+        setState(() {
+          entry.retrying = false;
+          _error = _failedUploadFeedback;
+        });
+      }
+    }
+  }
+
+  void _discardFailedUpload(_FailedUpload entry) {
+    setState(() {
+      _failedUploads.remove(entry);
+      _error = _failedUploadFeedback;
+    });
+  }
 
   void _removeImage(String url) {
     setState(() => _imageUrls.remove(url));
@@ -288,7 +355,8 @@ class _CommunityPublishScreenState
             loading: _loadingTrips,
             trips: _trips,
             selected: _selectedTrip,
-            onChanged: (TripSummary? trip) => setState(() => _selectedTrip = trip),
+            onChanged: (TripSummary? trip) =>
+                setState(() => _selectedTrip = trip),
             onRetry: _loadTrips,
           ),
           const SizedBox(height: AppSpacing.content),
@@ -361,12 +429,15 @@ class _CommunityPublishScreenState
           const SizedBox(height: AppSpacing.content),
           _ImageEditor(
             urls: _imageUrls,
+            failed: _failedUploads,
             displayUrl: _communityRepository.mediaUrl,
             uploading: _uploading,
             uploadProcessed: _uploadProcessed,
             uploadTotal: _uploadTotal,
             onAdd: _pickImages,
             onRemove: _removeImage,
+            onRetry: _retryUpload,
+            onDiscard: _discardFailedUpload,
           ),
           const SizedBox(height: AppSpacing.content),
           SurfaceCard(
@@ -624,18 +695,42 @@ class _TripField extends StatelessWidget {
   }
 }
 
+/// 图片文件名压缩到一行里放得下。只用于提示，不参与任何判断。
+String _shortName(String value) =>
+    value.length <= 16 ? value : '${value.substring(0, 16)}…';
+
+/// 一张上传失败、但还留在编辑页里的图片。
+///
+/// 失败时必须连着原始文件一起留住：只记一个文件名，用户就只能重新翻一遍
+/// 相册再传一次，而"重选全部"正是这一版要消掉的行为。
+class _FailedUpload {
+  _FailedUpload({required this.file, required this.message});
+
+  final XFile file;
+  String message;
+  bool retrying = false;
+}
+
 class _ImageEditor extends StatelessWidget {
   const _ImageEditor({
     required this.urls,
+    required this.failed,
     required this.displayUrl,
     required this.uploading,
     required this.uploadProcessed,
     required this.uploadTotal,
     required this.onAdd,
     required this.onRemove,
+    required this.onRetry,
+    required this.onDiscard,
   });
 
+  static const int _maxImages = 9;
+
   final List<String> urls;
+
+  /// 上传失败、等待重试的图片，顺序与用户挑选的顺序一致。
+  final List<_FailedUpload> failed;
 
   /// 入库值 -> 本机可显示的绝对地址。移除回调仍然回传入库值。
   final String Function(String) displayUrl;
@@ -644,90 +739,278 @@ class _ImageEditor extends StatelessWidget {
   final int uploadTotal;
   final VoidCallback onAdd;
   final ValueChanged<String> onRemove;
+  final ValueChanged<_FailedUpload> onRetry;
+  final ValueChanged<_FailedUpload> onDiscard;
 
   @override
-  Widget build(BuildContext context) => SurfaceCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                const _FieldLabel('旅记图片'),
-                const SizedBox(width: 8),
+  Widget build(BuildContext context) {
+    // 失败的图片也算占位：它们随时可能变成一张真的图片。
+    final int used = urls.length + failed.length;
+    final int remaining = _maxImages - used;
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const _FieldLabel('旅记图片'),
+              const SizedBox(width: 8),
+              Text(
+                used == 0 ? '最多 $_maxImages 张' : '已上传 ${urls.length} 张',
+                style: const TextStyle(
+                  fontSize: AppTypography.caption,
+                  color: AppColors.crackle,
+                  fontFeatures: AppTypography.tabularFigures,
+                ),
+              ),
+              const Spacer(),
+              if (!uploading && remaining > 0)
                 Text(
-                  urls.isEmpty ? '最多 9 张' : '已选 ${urls.length} / 9',
+                  '还可添加 $remaining 张',
                   style: const TextStyle(
                     fontSize: AppTypography.caption,
                     color: AppColors.crackle,
-                    fontFeatures: AppTypography.tabularFigures,
                   ),
                 ),
-                const Spacer(),
-                if (!uploading && urls.length < 9)
-                  Text(
-                    '还可添加 ${9 - urls.length} 张',
+            ],
+          ),
+          if (failed.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Icon(
+                  Icons.error_outline,
+                  size: 15,
+                  color: AppColors.kilnRed,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '有 ${failed.length} 张没有传上去。点图片上的「重试」只重传那一张，'
+                    '已经成功的不会重来一遍。',
                     style: const TextStyle(
                       fontSize: AppTypography.caption,
-                      color: AppColors.crackle,
+                      color: AppColors.riskText,
+                      height: 1.5,
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 100,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: <Widget>[
+                for (final String url in urls)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _Thumbnail(
+                      url: displayUrl(url),
+                      onRemove: () => onRemove(url),
+                    ),
+                  ),
+                for (final _FailedUpload entry in failed)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _FailedTile(
+                      entry: entry,
+                      onRetry: () => onRetry(entry),
+                      onDiscard: () => onDiscard(entry),
+                    ),
+                  ),
+                if (remaining > 0)
+                  _AddTile(
+                    remaining: remaining,
+                    onTap: uploading ? null : onAdd,
                   ),
               ],
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 100,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: <Widget>[
-                  for (final String url in urls)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _Thumbnail(
-                        url: displayUrl(url),
-                        onRemove: () => onRemove(url),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: uploading
+                ? Padding(
+                    key: const ValueKey<String>('uploading'),
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        ClipRRect(
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusPill),
+                          child: LinearProgressIndicator(
+                            minHeight: 6,
+                            value: uploadTotal <= 0
+                                ? null
+                                : uploadProcessed / uploadTotal,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '正在上传 $uploadProcessed / $uploadTotal 张图片，请稍候…',
+                          style: const TextStyle(
+                            fontSize: AppTypography.caption,
+                            color: AppColors.crackle,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(key: ValueKey<String>('idle')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 上传失败的那一张：本地缩略图 + 单张重试。
+///
+/// 用本地文件当预览，是因为这一张从来没上传成功过 —— 服务器上根本没有它，
+/// 拿一个网络地址去渲染只会得到一个假的占位图。
+class _FailedTile extends StatelessWidget {
+  const _FailedTile({
+    required this.entry,
+    required this.onRetry,
+    required this.onDiscard,
+  });
+
+  final _FailedUpload entry;
+  final VoidCallback onRetry;
+  final VoidCallback onDiscard;
+
+  @override
+  Widget build(BuildContext context) {
+    final BorderRadius radius = BorderRadius.circular(AppSpacing.radiusControl);
+    return Tooltip(
+      message: '${_shortName(entry.file.name)}：${entry.message}',
+      child: Semantics(
+        label: '上传失败：${entry.message}',
+        child: SizedBox(
+          width: 100,
+          height: 100,
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: radius,
+                  child: Image.file(
+                    File(entry.file.path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const ColoredBox(
+                      color: AppColors.surfaceSunken,
+                      child: Center(
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          size: 22,
+                          color: AppColors.crackle,
+                        ),
                       ),
                     ),
-                  if (urls.length < 9)
-                    _AddTile(
-                      remaining: 9 - urls.length,
-                      onTap: uploading ? null : onAdd,
-                    ),
-                ],
+                  ),
+                ),
               ),
-            ),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: uploading
-                  ? Padding(
-                      key: const ValueKey<String>('uploading'),
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(AppSpacing.radiusPill),
-                            child: LinearProgressIndicator(
-                              minHeight: 6,
-                              value: uploadTotal <= 0
-                                  ? null
-                                  : uploadProcessed / uploadTotal,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '正在上传 $uploadProcessed / $uploadTotal 张图片，请稍候…',
-                            style: const TextStyle(
-                              fontSize: AppTypography.caption,
-                              color: AppColors.crackle,
-                            ),
-                          ),
-                        ],
+              // 压一层暗红：一眼就能把"没传上去的"和"已经好了的"分开。
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0x59B23A22),
+                    borderRadius: radius,
+                    border: Border.all(color: AppColors.kilnRed, width: 1.5),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 4,
+                top: 4,
+                child: Tooltip(
+                  message: '不再上传这张图片',
+                  child: InkResponse(
+                    onTap: onDiscard,
+                    radius: 16,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: AppColors.ink,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.surface, width: 2),
                       ),
-                    )
-                  : const SizedBox.shrink(key: ValueKey<String>('idle')),
+                      child: const Icon(
+                        Icons.close,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (entry.retrying)
+                const Positioned.fill(
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Positioned(
+                  left: 8,
+                  right: 8,
+                  bottom: 8,
+                  child: _RetryChip(onTap: onRetry),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 「重试」按钮：只重传它所在的这一张。
+class _RetryChip extends StatelessWidget {
+  const _RetryChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Icons.refresh, size: 13, color: AppColors.kilnRed),
+                SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    '重试',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.kilnRed,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       );
 }
@@ -807,8 +1090,8 @@ class _AddTile extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                    Icon(
-                      Icons.add_a_photo_outlined,
+                    AppIcon(
+                      AppIcons.upload,
                       size: 22,
                       color: onTap == null
                           ? AppColors.crackle

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { mediaApi, poiApi } from '../api/endpoints'
-import { ApiError } from '../api/http'
+import { ApiError, mediaUrl } from '../api/http'
 import type { PoiInput, PoiView } from '../api/types'
 import DataState from '../components/DataState.vue'
 
@@ -545,7 +545,11 @@ function shortDate(value: string): string {
               <label>景点主图</label>
               <div class="media-row">
                 <div class="media-preview">
-                  <img v-if="form.imageUrl" :src="form.imageUrl" alt="景点主图预览" />
+                  <img
+                    v-if="form.imageUrl"
+                    :src="mediaUrl(form.imageUrl)"
+                    alt="景点主图预览"
+                  />
                   <span v-else>暂无图片</span>
                 </div>
                 <div class="media-side">

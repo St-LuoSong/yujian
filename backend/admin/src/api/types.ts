@@ -311,3 +311,83 @@ export interface CommunityReportPage {
   total: number
   hasMore: boolean
 }
+
+export interface AppReleaseView {
+  id: string
+  platform: string
+  /** 发布通道：RELEASE 面向正式用户，DEBUG 只在内部与演示机之间流转。 */
+  channel: string
+  packageName: string
+  versionCode: number
+  versionName: string
+  releaseTitle: string
+  releaseNotes: string
+  minimumSupportedVersionCode: number
+  updateMode: 'OPTIONAL' | 'RECOMMENDED' | 'REQUIRED' | string
+  status: 'UPLOADED' | 'PUBLISHED' | 'SUPERSEDED' | 'DISABLED' | string
+  fileSize: number
+  fileSha256: string
+  signingCertificateSha256: string
+  minimumSdk: number | null
+  targetSdk: number | null
+  publishedAt: string | null
+  createdAt: string
+}
+
+export interface PublishAppReleaseInput {
+  releaseTitle: string
+  releaseNotes: string
+  minimumSupportedVersionCode: number
+  updateMode: 'OPTIONAL' | 'RECOMMENDED' | 'REQUIRED'
+}
+
+/** 一条旅记评论（顶层评论带 replies，回复自身的 replies 恒为空）。 */
+export interface CommunityCommentView {
+  id: string
+  postId: string
+  parentId: string | null
+  authorName: string
+  authorAvatarKey: string | null
+  authorAvatarUrl: string | null
+  content: string
+  status: 'ACTIVE' | 'HIDDEN' | string
+  likeCount: number
+  likedByMe: boolean
+  mine: boolean
+  createdAt: string
+  replies: CommunityCommentView[]
+}
+
+export interface CommunityCommentPage {
+  items: CommunityCommentView[]
+  page: number
+  size: number
+  total: number
+  hasMore: boolean
+}
+
+/** 一个可调的安全参数（限流桶的额度/窗口、外部工具的每日配额）。 */
+export interface SecuritySettingItem {
+  key: string
+  group: 'rate' | 'quota' | string
+  label: string
+  value: number
+  defaultValue: number
+  min: number
+  max: number
+  unit: string
+  description: string
+}
+
+export interface SecurityQuotaUsage {
+  group: string
+  label: string
+  limit: number
+  used: number
+}
+
+export interface SecurityLimitsView {
+  items: SecuritySettingItem[]
+  quotas: SecurityQuotaUsage[]
+  activeWindows: number
+}

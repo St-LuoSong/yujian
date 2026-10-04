@@ -27,6 +27,11 @@ tooling/android-sdk/
 tooling/.gradle/
 tooling/.android/
 tooling/.pub-cache/
+# Dart/Flutter telemetry scratch written when APPDATA is redirected into the repo.
+tooling/tmpappdata/
+# Cloud/one-off deployment keys and staging artifacts. Deploy config lives outside
+# the repository on purpose: see docs/DEVELOPMENT_ENVIRONMENT.md.
+tooling/deploy-keys/
 .flutter_template/
 
 # IDE and local environment
@@ -47,3 +52,20 @@ scripts/user-env-backup.reg
 flutter_app/android/key.properties
 *.jks
 *.keystore
+
+# Cloud-specific deployment config.
+#
+# The repository ships the generic `backend/docker-compose.yml` + `Dockerfile`s so
+# anyone can run the stack. The `*.cloud.*` variants are tied to one particular
+# host (port bindings, deploy topology) and stay local.
+backend/docker-compose.cloud.yml
+backend/server/Dockerfile.cloud
+backend/admin/Dockerfile.cloud
+
+# Loose source drops at the repository root.
+#
+# Their processed copies are already tracked under `flutter_app/assets/`
+# (`assets/icons/` with ASCII names, `assets/brand/`). Committing both would
+# store the same megabytes twice for no benefit.
+/icons/
+/yujianlogo.png

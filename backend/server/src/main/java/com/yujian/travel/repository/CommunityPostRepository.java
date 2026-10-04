@@ -34,4 +34,15 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPostEnti
     Optional<CommunityPostEntity> findWithDetailsById(@Param("id") UUID id);
 
     long countByStatus(String status);
+
+    /**
+     * 还有多少篇其它旅记引用这张图片。
+     *
+     * 按文件名做宽松匹配：同一张图在不同记录里可能存成 `/media/x.jpg` 或
+     * `http://host/media/x.jpg` 两种写法，只比文件名才不会漏判。
+     */
+    @Query("select count(p) from CommunityPostEntity p join p.imageUrls i "
+        + "where i like concat('%', :fileName, '%') and p.id <> :excludeId")
+    long countOthersUsingImageFile(@Param("fileName") String fileName,
+                                   @Param("excludeId") UUID excludeId);
 }

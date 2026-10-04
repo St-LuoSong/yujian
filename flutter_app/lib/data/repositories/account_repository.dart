@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/network/api_failure.dart';
@@ -110,6 +113,36 @@ class AccountRepository {
         'avatarKey': avatarKey,
       },
     );
+    return UserProfile.fromJson(data);
+  }
+
+  /// 上传自定义头像。
+  ///
+  /// 与旅记图片共用服务端的重编码链路（去 EXIF、服务端生成文件名），
+  /// 客户端只负责把选中的文件送上去。
+  Future<UserProfile> uploadAvatar(File file) async {
+    try {
+      final data = await _client
+          .postMultipartJson(
+            '/auth/me/avatar',
+            data: FormData.fromMap(<String, Object>{
+              'file': await MultipartFile.fromFile(file.path),
+            }),
+          )
+          // 头像文件比旅记配图小得多，卡到 45 秒说明网络已经不可用了。
+          .timeout(const Duration(seconds: 30));
+      return UserProfile.fromJson(data);
+    } on TimeoutException {
+      throw const ApiFailure(
+        kind: ApiFailureKind.timeout,
+        message: '头像上传超时，请检查网络后重试。',
+      );
+    }
+  }
+
+  /// 移除自定义头像，回到预设图案或默认图案。
+  Future<UserProfile> removeAvatar() async {
+    final data = await _client.deleteJsonObject('/auth/me/avatar');
     return UserProfile.fromJson(data);
   }
 

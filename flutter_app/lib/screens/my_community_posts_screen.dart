@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/providers.dart';
+import '../core/icons/app_icons.dart';
 import '../core/network/api_failure.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
@@ -324,8 +325,11 @@ class _MyPostCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      const Icon(Icons.favorite,
-                          size: 15, color: AppColors.kilnRed),
+                      const AppIcon(
+                        AppIcons.likeFilled,
+                        size: 15,
+                        color: AppColors.kilnRed,
+                      ),
                       const SizedBox(width: 3),
                       Text(
                         '${post.likeCount}',

@@ -35,7 +35,8 @@ public final class AuthModels {
     }
 
     public record UserSummary(UUID id, String username, String nickname, String email,
-                              String avatarKey, boolean emailVerified, Set<String> roles) {
+                              String avatarKey, String avatarUrl, boolean emailVerified,
+                              Set<String> roles) {
     }
 
     public record AuthResponse(String accessToken, String refreshToken, long expiresIn, UserSummary user) {

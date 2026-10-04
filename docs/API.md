@@ -1021,7 +1021,33 @@ file=<二进制>
 
 ---
 
-## 15. 变更记录
+## 15. APK 版本与可信发布
+
+公开检查与下载：
+
+| 方法 | 路径 | 鉴权 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/app-releases/check?packageName=...&versionCode=...` | 无 | 返回最新版、最低支持版本、更新策略、文件 SHA-256 与证书 SHA-256 |
+| GET | `/api/app-releases/{id}/download` | 无 | 仅下载已发布或刚被替代的正式 APK |
+
+管理端：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/admin/app-releases` | 版本记录 |
+| POST | `/api/admin/app-releases` | `multipart/form-data` 上传并校验 APK，字段名 `file` |
+| POST | `/api/admin/app-releases/{id}/publish` | 设置说明、策略、最低支持版本并发布 |
+| PATCH | `/api/admin/app-releases/{id}/disable` | 停止发布 |
+
+上传校验包括签名完整性、包名、正式证书白名单、`versionCode` 递增与文件 SHA-256。
+客户端自报版本与证书只用于更新策略和本机风险提示，不作为服务端鉴权条件。
+
+---
+
+## 16. 变更记录
+
+当前接口文档版本：`v0.4.0-apis`。2026-10-03 新增 APK 可信上传、版本检查、
+正式包下载、可选/强制更新策略与签名连续性提示。
 
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |

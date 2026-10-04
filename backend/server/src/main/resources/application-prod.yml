@@ -4,9 +4,29 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: ${MYSQL_USER:yujian}
     password: ${MYSQL_PASSWORD:yujian_dev_password}
+  # 生产库的结构归 Flyway 管，不再由 Hibernate 在启动时顺手改。
+  #
+  # baseline-on-migrate 是接管已有库的关键：线上库是 ddl-auto=update 建起来的，
+  # 里面已经有用户、行程和运营台加的景点。Flyway 见到"非空但没有版本表"的库时，
+  # 会在版本 0 打一条基线记录，然后从 V1 开始跑 —— V1 每句都是 CREATE TABLE
+  # IF NOT EXISTS，对已有库是空操作，对新库才是完整建表。
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    baseline-description: hibernate-managed schema
+    validate-on-migrate: true
   jpa:
     hibernate:
-      ddl-auto: update
+      # 默认 none：结构由 Flyway 负责，Hibernate 不再动它。
+      #
+      # 没直接写 validate，是因为现有库是 Hibernate 一列一列攒出来的，在确认
+      # V1 与实体完全一致之前，validate 可能让服务在启动阶段直接拒绝起来 ——
+      # 那会把一次部署变成一次线上事故。想开严格校验时，先在一个空的 MySQL 上
+      # 跑一遍 V1（结构对得上就不会报错），再用环境变量覆盖：
+      #   SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
 app:
   smtp:
     enabled: ${SMTP_ENABLED:false}

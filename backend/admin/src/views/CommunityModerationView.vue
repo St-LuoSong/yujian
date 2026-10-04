@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { communityAdminApi } from '../api/endpoints'
-import { ApiError } from '../api/http'
-import type { CommunityPostView, CommunityReportView } from '../api/types'
+import { ApiError, mediaUrl } from '../api/http'
+import type {
+  CommunityCommentView,
+  CommunityPostView,
+  CommunityReportView,
+} from '../api/types'
 import DataState from '../components/DataState.vue'
 
 type Tab = 'posts' | 'reports'
@@ -21,6 +25,9 @@ const error = ref<string | null>(null)
 const selected = ref<CommunityPostView | null>(null)
 const moderationNote = ref('')
 const acting = ref(false)
+const comments = ref<CommunityCommentView[]>([])
+const commentsLoading = ref(false)
+const commentsError = ref<string | null>(null)
 
 const postStatuses = [
   { key: 'PENDING', label: '待审核' },
@@ -89,6 +96,36 @@ function selectReportStatus(status: string) {
 function openPost(post: CommunityPostView) {
   selected.value = post
   moderationNote.value = post.moderationNote ?? ''
+  comments.value = []
+  commentsError.value = null
+  loadComments(post.id)
+}
+
+/**
+ * 一篇旅记下的评论，含已隐藏的。
+ *
+ * 隐藏不删行：管理员先看到内容再决定，比"删掉之后再想恢复"要有余地得多。
+ */
+async function loadComments(postId: string) {
+  commentsLoading.value = true
+  commentsError.value = null
+  try {
+    const page = await communityAdminApi.comments(postId)
+    comments.value = page.items
+  } catch (cause) {
+    commentsError.value = cause instanceof ApiError ? cause.message : '评论加载失败'
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+async function moderateComment(comment: CommunityCommentView, status: 'ACTIVE' | 'HIDDEN') {
+  try {
+    await communityAdminApi.moderateComment(comment.id, status)
+    if (selected.value) await loadComments(selected.value.id)
+  } catch (cause) {
+    commentsError.value = cause instanceof ApiError ? cause.message : '评论处理失败'
+  }
 }
 
 async function moderate(status: string) {
@@ -323,8 +360,61 @@ onMounted(loadPosts)
           </div>
           <p class="hint">{{ selected.content }}</p>
           <div v-if="selected.imageUrls.length" class="moderation-gallery">
-            <img v-for="url in selected.imageUrls" :key="url" :src="url" :alt="selected.title" />
+            <img
+              v-for="url in selected.imageUrls"
+              :key="url"
+              :src="mediaUrl(url)"
+              :alt="selected.title"
+            />
           </div>
+
+          <section class="moderation-comments">
+            <header class="moderation-comments-head">
+              <strong>评论（{{ comments.length }}）</strong>
+              <span class="cell-sub">隐藏不删除，随时可以恢复</span>
+            </header>
+            <p v-if="commentsLoading" class="hint">正在加载评论…</p>
+            <p v-else-if="commentsError" class="alert">{{ commentsError }}</p>
+            <p v-else-if="!comments.length" class="hint">这篇旅记还没有评论。</p>
+            <template v-else>
+              <div v-for="comment in comments" :key="comment.id" class="moderation-comment">
+                <div class="moderation-comment-head">
+                  <span class="cell-strong">{{ comment.authorName }}</span>
+                  <span class="cell-sub">{{ shortDate(comment.createdAt) }}</span>
+                  <span v-if="comment.status === 'HIDDEN'" class="tag tag-warn">已隐藏</span>
+                  <span class="tag tag-plain">赞 {{ comment.likeCount }}</span>
+                  <button
+                    class="btn btn-sm"
+                    type="button"
+                    @click="moderateComment(comment, comment.status === 'HIDDEN' ? 'ACTIVE' : 'HIDDEN')"
+                  >
+                    {{ comment.status === 'HIDDEN' ? '恢复' : '隐藏' }}
+                  </button>
+                </div>
+                <p class="moderation-comment-body">{{ comment.content }}</p>
+                <div
+                  v-for="reply in comment.replies"
+                  :key="reply.id"
+                  class="moderation-comment moderation-comment-reply"
+                >
+                  <div class="moderation-comment-head">
+                    <span class="cell-strong">{{ reply.authorName }}</span>
+                    <span class="cell-sub">{{ shortDate(reply.createdAt) }}</span>
+                    <span v-if="reply.status === 'HIDDEN'" class="tag tag-warn">已隐藏</span>
+                    <button
+                      class="btn btn-sm"
+                      type="button"
+                      @click="moderateComment(reply, reply.status === 'HIDDEN' ? 'ACTIVE' : 'HIDDEN')"
+                    >
+                      {{ reply.status === 'HIDDEN' ? '恢复' : '隐藏' }}
+                    </button>
+                  </div>
+                  <p class="moderation-comment-body">{{ reply.content }}</p>
+                </div>
+              </div>
+            </template>
+          </section>
+
           <div class="field">
             <label>审核说明</label>
             <textarea

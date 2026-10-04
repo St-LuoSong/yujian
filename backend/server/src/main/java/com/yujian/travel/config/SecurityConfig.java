@@ -44,6 +44,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/auth/**", "/api/home", "/api/pois/**",
                     "/api/anonymous/session", "/actuator/health",
+                    // Version checks and verified APK downloads must work before sign-in.
+                    "/api/app-releases/**",
                     // 只读分享页对浏览器公开：接收者不应为了看一份行程去注册账号。
                     "/share/**",
                     // 运营台上传的景点配图通过只读路径公开，写入仍然只在 /api/admin/** 下。
@@ -57,7 +59,9 @@ public class SecurityConfig {
                     "/api/feedback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/trip-shares/*").permitAll()
                 // 社区公开信息流与详情不要求登录；发布、点赞和举报仍然必须登录。
-                .requestMatchers(HttpMethod.GET, "/api/community/posts", "/api/community/posts/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/community/posts", "/api/community/posts/*",
+                    // 评论跟详情页一样是公开只读的；发言仍然要登录。
+                    "/api/community/posts/*/comments").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/email/**").permitAll()
                 // Operator endpoints. The bootstrap account is created from
                 // ADMIN_USERNAME / ADMIN_PASSWORD, so this is never public.

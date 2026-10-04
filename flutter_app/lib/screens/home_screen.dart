@@ -1,8 +1,10 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/providers.dart';
 import '../app/session_providers.dart';
+import '../core/config/app_config.dart';
 import '../core/data_status.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
@@ -722,6 +724,8 @@ class _BrandBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final UserProfile? user = ref.watch(sessionProvider).valueOrNull;
     final int unread = ref.watch(unreadNoticeCountProvider);
+    // 自定义头像是 /media/... 相对路径，显示前要补成这台设备能访问的地址。
+    final AppConfig config = ref.watch(appConfigProvider);
     return Row(
       children: <Widget>[
         Container(
@@ -777,6 +781,7 @@ class _BrandBar extends ConsumerWidget {
         _HeaderAvatar(
           key: const Key('home-avatar'),
           user: user,
+          avatarUrl: config.resolveMediaUrl(user?.avatarUrl ?? ''),
           onTap: onOpenProfile,
         ),
       ],
@@ -847,15 +852,22 @@ class _NoticeBell extends StatelessWidget {
       );
 }
 
-/// 首页右上角的圆形头像。未登录是空心人像，登录后是用户名首字。
+/// 首页右上角的圆形头像。
+///
+/// 三种来源按优先级取：上传的照片 → 预设图案 → 用户名首字。
+/// 之前这一处只画首字，所以"换了头像但首页没变"，是同一个信息在两处各算了一遍。
 class _HeaderAvatar extends StatelessWidget {
   const _HeaderAvatar({
     super.key,
     required this.user,
+    required this.avatarUrl,
     required this.onTap,
   });
 
   final UserProfile? user;
+
+  /// 已解析为绝对地址的自定义头像；为空表示没有上传过照片。
+  final String avatarUrl;
   final VoidCallback onTap;
 
   @override
@@ -865,6 +877,8 @@ class _HeaderAvatar extends StatelessWidget {
         ? ''
         : account.username.substring(0, 1);
     final bool signedIn = initial.isNotEmpty;
+    final bool hasPhoto = signedIn && avatarUrl.isNotEmpty;
+    final IconData? preset = _presetIcon(account?.avatarKey);
     return Semantics(
       button: true,
       label: signedIn ? '我的，已登录 $initial' : '我的，尚未登录',
@@ -875,6 +889,7 @@ class _HeaderAvatar extends StatelessWidget {
           child: Container(
             width: 38,
             height: 38,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: signedIn ? AppColors.celadonDeep : AppColors.surface,
@@ -885,25 +900,52 @@ class _HeaderAvatar extends StatelessWidget {
               boxShadow: AppColors.chipShadow,
             ),
             alignment: Alignment.center,
-            child: signedIn
-                ? Text(
-                    initial,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onInk,
-                    ),
-                  )
-                : const Icon(
+            child: !signedIn
+                ? const Icon(
                     Icons.person_outline,
                     size: 19,
                     color: AppColors.crackle,
-                  ),
+                  )
+                : hasPhoto
+                    ? CachedNetworkImage(
+                        imageUrl: avatarUrl,
+                        width: 38,
+                        height: 38,
+                        fit: BoxFit.cover,
+                        fadeInDuration: const Duration(milliseconds: 160),
+                        // 图片挂了就回到预设或首字，不留一个碎图图标。
+                        errorWidget: (_, __, ___) => _letterOrPreset(initial, preset),
+                        placeholder: (_, __) => const SizedBox.shrink(),
+                      )
+                    : _letterOrPreset(initial, preset),
           ),
         ),
       ),
     );
   }
+
+  Widget _letterOrPreset(String initial, IconData? preset) {
+    if (preset != null) {
+      return Icon(preset, size: 19, color: AppColors.onInk);
+    }
+    return Text(
+      initial,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: AppColors.onInk,
+      ),
+    );
+  }
+
+  static IconData? _presetIcon(String? key) => switch (key) {
+        'celadon' => Icons.landscape_outlined,
+        'kiln' => Icons.account_balance_outlined,
+        'amber' => Icons.wb_sunny_outlined,
+        'river' => Icons.water_outlined,
+        'ink' => Icons.auto_awesome_outlined,
+        _ => null,
+      };
 }
 
 /// The first screen: one photograph, one sentence, one action.

@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,15 +30,18 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AccountDeletionService accountDeletionService;
+    private final MediaStorageService mediaStorage;
 
     public AuthService(UserAccountRepository userRepository, RefreshTokenRepository refreshTokenRepository,
                        PasswordEncoder passwordEncoder, JwtService jwtService,
-                       AccountDeletionService accountDeletionService) {
+                       AccountDeletionService accountDeletionService,
+                       MediaStorageService mediaStorage) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.accountDeletionService = accountDeletionService;
+        this.mediaStorage = mediaStorage;
     }
 
     @Transactional
@@ -118,9 +122,64 @@ public class AuthService {
         if (avatarKey != null && !avatarKey.isEmpty() && !ALLOWED_AVATARS.contains(avatarKey)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AVATAR_KEY_INVALID", "头像标识不合法");
         }
+        String previousAvatarUrl = user.getAvatarUrl();
         user.setNickname(nickname == null || nickname.isEmpty() ? null : nickname);
         user.setAvatarKey(avatarKey == null || avatarKey.isEmpty() ? null : avatarKey);
-        return summary(userRepository.save(user));
+        // 明确选了预设图案就等于放弃自定义头像，否则用户点了预设却还看到旧照片。
+        // avatarKey 为空是"没选预设"，这时自定义头像保持不动 —— 改个昵称不该把
+        // 头像一起弄丢。
+        if (user.getAvatarKey() != null) {
+            user.setAvatarUrl(null);
+        }
+        AuthModels.UserSummary saved = summary(userRepository.save(user));
+        deleteReplacedAvatar(previousAvatarUrl, user.getAvatarUrl());
+        return saved;
+    }
+
+    /**
+     * 上传自定义头像。
+     *
+     * 走与旅记图片同一条重编码链路：文件名由服务端生成、类型只看文件头、
+     * 重新编码时丢掉 EXIF。存的是服务端相对路径而不是完整 URL —— 完整 URL 会把
+     * "上传时那个主机名"写进数据库，换域名或换端口之后所有历史头像都会失效。
+     */
+    @Transactional
+    public AuthModels.UserSummary updateAvatar(UUID userId, MultipartFile file) {
+        UserAccount user = requireUser(userId);
+        MediaStorageService.StoredImage stored = mediaStorage.storeCommunityImage(file);
+        String previousAvatarUrl = user.getAvatarUrl();
+        user.setAvatarUrl(stored.relativeUrl());
+        user.setAvatarKey(null);
+        AuthModels.UserSummary saved = summary(userRepository.save(user));
+        deleteReplacedAvatar(previousAvatarUrl, user.getAvatarUrl());
+        return saved;
+    }
+
+    /** 移除自定义头像，回到预设图案或默认图案。 */
+    @Transactional
+    public AuthModels.UserSummary removeAvatar(UUID userId) {
+        UserAccount user = requireUser(userId);
+        String previousAvatarUrl = user.getAvatarUrl();
+        user.setAvatarUrl(null);
+        AuthModels.UserSummary saved = summary(userRepository.save(user));
+        deleteReplacedAvatar(previousAvatarUrl, null);
+        return saved;
+    }
+
+    /**
+     * 换头像后清掉旧文件。
+     *
+     * 只在旧地址确实指向本服务媒体库时才删 —— 地址不是本服务的（或已经是空）
+     * 一律不碰，避免把别的资源删掉。
+     */
+    private void deleteReplacedAvatar(String previousUrl, String currentUrl) {
+        if (previousUrl == null || previousUrl.isBlank() || previousUrl.equals(currentUrl)) {
+            return;
+        }
+        String fileName = MediaStorageService.fileNameOf(previousUrl);
+        if (fileName != null) {
+            mediaStorage.delete(fileName);
+        }
     }
 
     @Transactional
@@ -180,7 +239,8 @@ public class AuthService {
 
     private AuthModels.UserSummary summary(UserAccount user) {
         return new AuthModels.UserSummary(user.getId(), user.getUsername(), user.getNickname(),
-            user.getEmail(), user.getAvatarKey(), user.isEmailVerified(), Set.copyOf(user.getRoles()));
+            user.getEmail(), user.getAvatarKey(), user.getAvatarUrl(),
+            user.isEmailVerified(), Set.copyOf(user.getRoles()));
     }
 
     private Claims parseRefresh(String rawRefreshToken) {

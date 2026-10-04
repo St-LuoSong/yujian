@@ -84,6 +84,19 @@ public class CommunityPostEntity {
     @Column(name = "like_count", nullable = false)
     private long likeCount;
 
+    @Column(name = "favorite_count", nullable = false)
+    private long favoriteCount;
+
+    /**
+     * 评论数。
+     *
+     * 与点赞/收藏一样是冗余计数：信息流一页要渲染十几张卡片，每条都去
+     * count 一次评论表会把列表接口变成 N+1 查询。写评论/删评论时同步维护，
+     * 只允许向非负方向收敛。
+     */
+    @Column(name = "comment_count", nullable = false)
+    private long commentCount;
+
     @Column(name = "view_count", nullable = false)
     private long viewCount;
 

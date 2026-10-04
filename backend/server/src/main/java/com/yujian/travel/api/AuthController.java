@@ -7,14 +7,17 @@ import com.yujian.travel.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -62,6 +65,17 @@ public class AuthController {
     @PatchMapping("/me")
     public AuthModels.UserSummary updateMe(@Valid @RequestBody AuthModels.UpdateProfileRequest request) {
         return authService.updateProfile(CurrentUser.requireUser().id(), request.nickname(), request.avatarKey());
+    }
+
+    /** 自定义头像上传。与旅记图片共用同一条重编码去 EXIF 的存储链路。 */
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AuthModels.UserSummary uploadAvatar(@RequestParam("file") MultipartFile file) {
+        return authService.updateAvatar(CurrentUser.requireUser().id(), file);
+    }
+
+    @DeleteMapping("/me/avatar")
+    public AuthModels.UserSummary removeAvatar() {
+        return authService.removeAvatar(CurrentUser.requireUser().id());
     }
 
     @PostMapping("/change-password")

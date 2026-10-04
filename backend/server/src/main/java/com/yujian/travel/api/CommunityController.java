@@ -44,6 +44,14 @@ public class CommunityController {
         return communityService.mine(CurrentUser.requireUser().id(), page, size);
     }
 
+    /** 我收藏的旅记（书签）。 */
+    @GetMapping("/posts/favorites")
+    public CommunityModels.PostPage favorites(
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "10") int size) {
+        return communityService.favorites(CurrentUser.requireUser().id(), page, size);
+    }
+
     @GetMapping("/posts/{id}")
     public CommunityModels.PostView detail(@PathVariable UUID id) {
         AuthUser viewer = CurrentUser.userOrNull();
@@ -78,10 +86,61 @@ public class CommunityController {
         return communityService.unlike(CurrentUser.requireUser().id(), id);
     }
 
+    @PostMapping("/posts/{id}/favorite")
+    public CommunityModels.PostView favorite(@PathVariable UUID id) {
+        return communityService.favorite(CurrentUser.requireUser().id(), id);
+    }
+
+    @DeleteMapping("/posts/{id}/favorite")
+    public CommunityModels.PostView unfavorite(@PathVariable UUID id) {
+        return communityService.unfavorite(CurrentUser.requireUser().id(), id);
+    }
+
     @PostMapping("/posts/{id}/report")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void report(@PathVariable UUID id,
                        @Valid @RequestBody CommunityModels.ReportRequest request) {
         communityService.report(CurrentUser.requireUser().id(), id, request.reason());
+    }
+
+    /** 旅记下的评论。未登录可以看，发言和撤回自己的评论需要登录。 */
+    @GetMapping("/posts/{id}/comments")
+    public CommunityModels.CommentPage comments(
+        @PathVariable UUID id,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int size) {
+        AuthUser viewer = CurrentUser.userOrNull();
+        return communityService.comments(id, page, size, viewer == null ? null : viewer.id());
+    }
+
+    @PostMapping("/posts/{id}/comments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CommunityModels.CommentView comment(
+        @PathVariable UUID id,
+        @Valid @RequestBody CommunityModels.CreateCommentRequest request) {
+        return communityService.addComment(
+            CurrentUser.requireUser().id(), id, request.content(), request.parentId());
+    }
+
+    @DeleteMapping("/comments/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteComment(@PathVariable UUID id) {
+        communityService.deleteComment(CurrentUser.requireUser().id(), id);
+    }
+
+    @PostMapping("/comments/{id}/like")
+    public CommunityModels.CommentView likeComment(@PathVariable UUID id) {
+        return communityService.likeComment(CurrentUser.requireUser().id(), id);
+    }
+
+    @DeleteMapping("/comments/{id}/like")
+    public CommunityModels.CommentView unlikeComment(@PathVariable UUID id) {
+        return communityService.unlikeComment(CurrentUser.requireUser().id(), id);
+    }
+
+    /** 「我的」页的互动数据：只统计别人对我的动作。 */
+    @GetMapping("/stats/me")
+    public CommunityModels.CommunityStats myStats() {
+        return communityService.myStats(CurrentUser.requireUser().id());
     }
 }

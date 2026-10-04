@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import 'data_status_badge.dart';
+import 'meta_flow.dart';
 
 /// The itinerary drawn as a measured line.
 ///
@@ -213,19 +214,18 @@ class _StopDetail extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        // 每次新增一个元信息字段都会多一个可能撑破屏幕的入口，
+        // 因此这里统一交给 MetaFlow 收口（宽度上限 + 自动省略）。
+        MetaFlow(
           children: <Widget>[
             if ((stop.transport ?? '').isNotEmpty)
-              _Unit(
-                icon: Icons.directions_walk,
-                text: stop.transport!,
-              ),
+              MetaUnit(icon: Icons.directions_walk, text: stop.transport!),
             if ((stop.duration ?? '').isNotEmpty)
-              _Unit(icon: Icons.schedule, text: stop.duration!),
-            _Unit(icon: Icons.description_outlined, text: '来源 ${stop.source}'),
+              MetaUnit(icon: Icons.schedule, text: stop.duration!),
+            MetaUnit(
+              icon: Icons.description_outlined,
+              text: '来源 ${stop.source}',
+            ),
           ],
         ),
         if (showStatus) ...<Widget>[
@@ -246,29 +246,4 @@ class _StopDetail extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Icon plus value. Replaces the old middle-dot meta strings with labelled
-/// units so each fact can be checked on its own.
-class _Unit extends StatelessWidget {
-  const _Unit({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, size: 13, color: AppColors.crackle),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: AppTypography.caption,
-              color: AppColors.crackle,
-            ),
-          ),
-        ],
-      );
 }

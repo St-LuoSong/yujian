@@ -219,6 +219,47 @@ public class MediaStorageService {
         return resolved;
     }
 
+    /**
+     * 删除一张已经没有任何旅记引用的图片。
+     *
+     * 清理磁盘不是用户操作的一部分，所以失败只记日志、不抛异常：
+     * 「删除旅记」不能因为一个孤儿文件删不掉而失败。
+     */
+    public boolean delete(String fileName) {
+        try {
+            return Files.deleteIfExists(resolveSafely(fileName));
+        } catch (Exception exception) {
+            log.warn("Failed to delete media file {}", fileName, exception);
+            return false;
+        }
+    }
+
+    /**
+     * 从入库的图片地址里取出文件名。
+     *
+     * 返回 null 表示这不是本站 `/media/` 图片（外链图片不归我们管），
+     * 或地址里带了路径分隔符（拒绝越权删除）。
+     */
+    public static String fileNameOf(String url) {
+        if (url == null) {
+            return null;
+        }
+        String path = url.trim();
+        int query = path.indexOf('?');
+        if (query >= 0) {
+            path = path.substring(0, query);
+        }
+        int marker = path.indexOf("/media/");
+        if (marker < 0) {
+            return null;
+        }
+        String name = path.substring(marker + "/media/".length());
+        if (name.isEmpty() || name.contains("/") || name.contains("\\")) {
+            return null;
+        }
+        return name;
+    }
+
     private static int[] readDimensions(byte[] bytes) {
         try (ImageInputStream stream = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             if (stream == null) {

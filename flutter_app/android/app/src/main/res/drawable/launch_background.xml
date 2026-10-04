@@ -6,10 +6,10 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/yujian_paper" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- 启动页居中展示豫见智旅 logo；首帧绘制后由 Flutter 接管。 -->
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/splash_logo" />
+    </item>
 </layer-list>

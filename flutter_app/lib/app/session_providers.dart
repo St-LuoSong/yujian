@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/account_repository.dart';
@@ -91,6 +93,20 @@ class SessionController extends AsyncNotifier<UserProfile?> {
       nickname: nickname,
       avatarKey: avatarKey,
     );
+    _adopt(user);
+    return user;
+  }
+
+  /// 上传自定义头像。服务端返回的是更新后的用户，直接用它刷新会话。
+  Future<UserProfile> uploadAvatar(File file) async {
+    final user = await _repository.uploadAvatar(file);
+    _adopt(user);
+    return user;
+  }
+
+  /// 移除自定义头像，回到预设或默认图案。
+  Future<UserProfile> removeAvatar() async {
+    final user = await _repository.removeAvatar();
     _adopt(user);
     return user;
   }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 设计师提供的完整 logo（含字标）作为前景，居中放在 108dp 安全区内；
+         背景用纯白，与 logo 圆角外的透明区域衔接，任何遮罩都不会裁到字标。 -->
+    <background android:drawable="@color/yujian_icon_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

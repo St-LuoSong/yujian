@@ -159,6 +159,51 @@ void main() {
 
     expect(updated.status, 'PENDING');
   });
+
+  test('收藏与取消收藏走独立的 favorite 端点，并读取真实计数', () async {
+    final adapter = RecordingAdapter((options, _) async {
+      expect(options.path, '/community/posts/p1/favorite');
+      if (options.method == 'POST') {
+        return jsonBody(<String, Object>{
+          ..._postJson(),
+          'favoritedByMe': true,
+          'favoriteCount': 1,
+        });
+      }
+      return jsonBody(<String, Object>{
+        ..._postJson(),
+        'favoritedByMe': false,
+        'favoriteCount': 0,
+      });
+    });
+    final repository = _repository(adapter);
+
+    final CommunityPost saved = await repository.favorite('p1');
+    expect(saved.favoritedByMe, isTrue);
+    expect(saved.favoriteCount, 1);
+
+    final CommunityPost removed = await repository.unfavorite('p1');
+    expect(removed.favoritedByMe, isFalse);
+    expect(removed.favoriteCount, 0);
+  });
+
+  test('我收藏的旅记走 /community/posts/favorites', () async {
+    final adapter = RecordingAdapter((options, _) async {
+      expect(options.path, '/community/posts/favorites');
+      expect(options.queryParameters['page'], 1);
+      return jsonBody(<String, Object>{
+        'items': <Object>[_postJson()],
+        'page': 1,
+        'size': 20,
+        'total': 1,
+        'hasMore': false,
+      });
+    });
+
+    final CommunityPage page = await _repository(adapter).fetchFavorites();
+
+    expect(page.items, hasLength(1));
+  });
 }
 
 CommunityRepository _repository(RecordingAdapter adapter) =>

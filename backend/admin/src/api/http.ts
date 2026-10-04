@@ -27,6 +27,25 @@ export function buildUrl(path: string, query?: Record<string, QueryValue>): stri
   return qs ? url + '?' + qs : url
 }
 
+/**
+ * 把服务端返回的 `/media/...` 相对地址补成浏览器能直接取的地址。
+ *
+ * 上传接口按"谁上传就归谁"的规则推导地址，旅记配图入库时存的是相对路径。
+ * 运营台如果把它原样塞进 `<img src>`，浏览器会去请求运营台自己的域名 ——
+ * 那边只有 SPA 的 index.html（`try_files` 兜底），于是显示成一张碎图。
+ *
+ * 走 API 的绝对地址时（VITE_API_BASE 配了完整域名），这里会拼成对应的
+ * 媒体域名；走相对地址时保持相对，由运营台的 nginx 把 `/media/` 反代到后端。
+ */
+export function mediaUrl(raw: string | null | undefined): string {
+  const value = (raw ?? '').trim()
+  if (!value) return ''
+  if (/^(https?:)?\/\//i.test(value)) return value
+  // BASE 形如 `/api` 或 `https://api.example.com/api`；图片挂在它的兄弟路径下。
+  const origin = BASE.replace(/\/api$/, '')
+  return origin + (value.startsWith('/') ? value : '/' + value)
+}
+
 function authHeaders(): Record<string, string> {
   const token = readToken()
   return token ? { Authorization: 'Bearer ' + token } : {}
@@ -92,9 +111,40 @@ async function request<T>(method: string, path: string, options: RequestOptions 
  *
  * 刻意不设置 Content-Type：浏览器需要自己补 boundary，手写会破坏请求。
  */
-async function upload<T>(path: string, file: File, fieldName = 'file'): Promise<T> {
+async function upload<T>(
+  path: string,
+  file: File,
+  fieldName = 'file',
+  onProgress?: (percent: number) => void,
+): Promise<T> {
   const form = new FormData()
   form.append(fieldName, file)
+
+  if (onProgress) {
+    return new Promise<T>((resolve, reject) => {
+      const request = new XMLHttpRequest()
+      request.open('POST', buildUrl(path))
+      request.setRequestHeader('Accept', 'application/json')
+      const token = readToken()
+      if (token) request.setRequestHeader('Authorization', 'Bearer ' + token)
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100))
+      }
+      request.onerror = () => reject(new ApiError(0, 'NETWORK_UNREACHABLE', '无法连接服务端，请确认后端已启动'))
+      request.onload = async () => {
+        try {
+          const response = new Response(request.responseText, {
+            status: request.status,
+            headers: { 'Content-Type': request.getResponseHeader('Content-Type') ?? 'application/json' },
+          })
+          resolve(await readResponse<T>(response, false))
+        } catch (cause) {
+          reject(cause)
+        }
+      }
+      request.send(form)
+    })
+  }
 
   let response: Response
   try {

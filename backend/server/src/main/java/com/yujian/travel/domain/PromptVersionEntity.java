@@ -38,7 +38,7 @@ public class PromptVersionEntity {
     private String version;
 
     @Lob
-    @Column(name = "system_prompt", nullable = false)
+    @Column(name = "system_prompt", nullable = false, columnDefinition = "LONGTEXT")
     private String systemPrompt;
 
     @Column(length = 200)

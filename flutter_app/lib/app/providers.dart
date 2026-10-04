@@ -4,11 +4,13 @@ import '../core/config/app_config.dart';
 import '../core/network/api_client.dart';
 import '../core/network/dio_factory.dart';
 import '../core/network/session_interceptor.dart';
+import '../core/platform/app_release_platform.dart';
 import '../core/storage/local_cache.dart';
 import '../core/storage/server_endpoint_store.dart';
 import '../core/storage/session_store.dart';
 import '../data/repositories/account_repository.dart';
 import '../data/repositories/community_repository.dart';
+import '../data/repositories/app_update_repository.dart';
 import '../data/repositories/travel_repository.dart';
 import 'bootstrap.dart';
 
@@ -96,5 +98,17 @@ final communityRepositoryProvider = Provider<CommunityRepository>(
   (ref) => CommunityRepository(
     client: ref.watch(apiClientProvider),
     config: ref.watch(appConfigProvider),
+  ),
+);
+
+final appReleasePlatformProvider = Provider<AppReleasePlatform>(
+  (ref) => const AndroidAppReleasePlatform(),
+);
+
+final appUpdateRepositoryProvider = Provider<AppUpdateRepository>(
+  (ref) => AppUpdateRepository(
+    client: ref.watch(apiClientProvider),
+    config: ref.watch(appConfigProvider),
+    platform: ref.watch(appReleasePlatformProvider),
   ),
 );

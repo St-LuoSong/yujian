@@ -4,6 +4,7 @@ import com.yujian.travel.api.TravelModels;
 import com.yujian.travel.domain.ToolInvocationLog;
 import com.yujian.travel.repository.ToolInvocationLogRepository;
 import com.yujian.travel.service.PlanDates;
+import com.yujian.travel.service.ToolQuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,12 +48,14 @@ public class ToolOrchestrator {
     private final TravelToolPort travelTools;
     private final ToolInvocationLogRepository invocationLogRepository;
     private final ToolHealth toolHealth;
+    private final ToolQuotaService toolQuota;
 
     public ToolOrchestrator(TravelToolPort travelTools, ToolInvocationLogRepository invocationLogRepository,
-                            ToolHealth toolHealth) {
+                            ToolHealth toolHealth, ToolQuotaService toolQuota) {
         this.travelTools = travelTools;
         this.invocationLogRepository = invocationLogRepository;
         this.toolHealth = toolHealth;
+        this.toolQuota = toolQuota;
     }
 
     public ToolCollection collect(TravelModels.PlanRequest request) {
@@ -237,6 +240,15 @@ public class ToolOrchestrator {
 
     private ToolResult<?> measure(String toolName, Supplier<ToolResult<?>> supplier) {
         long startedAt = System.nanoTime();
+        // 配额检查放在调用之前：超额时一次外部请求都不发出去。
+        ToolQuotaService.Decision quota = toolQuota.check(toolName);
+        if (!quota.allowed()) {
+            // 配额用尽是主动熔断，不是故障，所以不记进健康度（那会污染"接上没有"的判断）。
+            // 也不塞一份演示数据进去：上层按既有规则如实标注"这一项没取到"，
+            // 比把兜底数据说成实时数据诚实得多。
+            return ToolResult.error(toolLabel(toolName) + "工具",
+                "TOOL_QUOTA_EXCEEDED", quota.reason());
+        }
         ToolResult<?> result;
         try {
             result = supplier.get();

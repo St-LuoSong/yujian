@@ -3,6 +3,7 @@ package com.yujian.travel.ai;
 import com.yujian.travel.api.TravelModels;
 import com.yujian.travel.service.PlanDates;
 import com.yujian.travel.service.TripPlanFactory;
+import com.yujian.travel.service.ToolQuotaService;
 import com.yujian.travel.tools.MockTravelTools;
 import com.yujian.travel.tools.ToolHealth;
 import com.yujian.travel.tools.ToolModels;
@@ -15,6 +16,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * The fallback chain is the whole point of the vendor layer, so it is verified
@@ -80,8 +84,16 @@ class TravelPlanningFacadeTest {
             PlanningEngineRegistry.of(List.of(engines)),
             new MockPlanningEngine(new TripPlanFactory()),
             new TripPlanValidator(),
-            new ToolOrchestrator(offlinePort(), null, new ToolHealth()),
+            new ToolOrchestrator(offlinePort(), null, new ToolHealth(), quotaAllowing()),
             health);
+    }
+
+    /** 这组用例只关心降级链，配额一律放行。 */
+    private static ToolQuotaService quotaAllowing() {
+        ToolQuotaService quota = mock(ToolQuotaService.class);
+        when(quota.check(anyString())).thenReturn(
+            new ToolQuotaService.Decision(true, "local", "本地资料", 0, 0, ""));
+        return quota;
     }
 
     /**
